@@ -1,0 +1,20 @@
+# Node.js
+node_modules/
+dist/
+.env
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Optional OS files
+Thumbs.db
