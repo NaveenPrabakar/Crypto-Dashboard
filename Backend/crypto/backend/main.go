@@ -44,6 +44,10 @@ router.HandleFunc("/average/{coin_id}", getAveragePrice).Methods("GET")
 router.HandleFunc("/at/{coin_id}", getPriceAtTime).Methods("GET")
 router.HandleFunc("/range/{coin_id}", getPriceRange).Methods("GET")
 router.HandleFunc("/coins", getAvailableCoins).Methods("GET")
+router.HandleFunc("/volatility/{coin_id}", getVolatility).Methods("GET")
+router.HandleFunc("/trend/{coin_id}", getTrend).Methods("GET")
+router.HandleFunc("/top-movers", getTopMovers).Methods("GET")
+
 
 
 

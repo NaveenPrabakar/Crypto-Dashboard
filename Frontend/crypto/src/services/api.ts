@@ -50,4 +50,28 @@ export class ApiService {
     }
     return response.json()
   }
+
+  static async getVolatility(coinId: string, start: string, end: string): Promise<VolatilityData> {
+    const response = await fetch(`${API_BASE_URL}/volatility/${coinId}?start=${start}&end=${end}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch volatility data')
+    }
+    return response.json()
+  }
+
+  static async getTrend(coinId: string, start: string, end: string): Promise<TrendData> {
+    const response = await fetch(`${API_BASE_URL}/trend/${coinId}?start=${start}&end=${end}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch trend data')
+    }
+    return response.json()
+  }
+
+  static async getTopMovers(minutes: number = 60): Promise<TopMoverData[]> {
+    const response = await fetch(`${API_BASE_URL}/top-movers?minutes=${minutes}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch top movers data')
+    }
+    return response.json()
+  }
 } 
