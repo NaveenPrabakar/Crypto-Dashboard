@@ -19,7 +19,7 @@ type CoinGeckoResponse map[string]struct {
 
 func main() {
     
-    cluster := gocql.NewCluster("127.0.0.1")
+    cluster := gocql.NewCluster("host.docker.internal")
     cluster.Keyspace = "iot_data"
     cluster.Consistency = gocql.Quorum
 
