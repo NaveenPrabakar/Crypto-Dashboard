@@ -49,15 +49,13 @@ router.HandleFunc("/coins", getAvailableCoins).Methods("GET")
 
 
 
-// Setup CORS middleware
 c := cors.New(cors.Options{
-    AllowedOrigins:   []string{"http://localhost:5173"}, // your frontend origin
+    AllowedOrigins:   []string{"http://localhost:5173"}, 
     AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
     AllowedHeaders:   []string{"*"},
     AllowCredentials: true,
 })
 
-// Wrap router with CORS handler
 handler := c.Handler(router)
 
 fmt.Println("Server running at :8000")
@@ -116,7 +114,7 @@ func getHistory(w http.ResponseWriter, r *http.Request) {
 
     var data PriceData
     for iter.Scan(&data.CoinID, &data.Timestamp, &data.PriceUSD) {
-        // Important: make a new instance each time to avoid shared reference
+        
         results = append(results, PriceData{
             CoinID:    data.CoinID,
             Timestamp: data.Timestamp,
@@ -138,7 +136,7 @@ func getAveragePrice(w http.ResponseWriter, r *http.Request) {
     vars := mux.Vars(r)
     coinID := vars["coin_id"]
 
-    startStr := r.URL.Query().Get("start") // e.g., "2025-08-01T00:00:00Z"
+    startStr := r.URL.Query().Get("start") 
     endStr := r.URL.Query().Get("end")
 
     start, err := time.Parse(time.RFC3339, startStr)
@@ -194,7 +192,7 @@ func getAveragePrice(w http.ResponseWriter, r *http.Request) {
 func getPriceAtTime(w http.ResponseWriter, r *http.Request) {
     vars := mux.Vars(r)
     coinID := vars["coin_id"]
-    tsStr := r.URL.Query().Get("timestamp") // e.g., 2025-08-05T14:30:00Z
+    tsStr := r.URL.Query().Get("timestamp") 
 
     ts, err := time.Parse(time.RFC3339, tsStr)
     if err != nil {
