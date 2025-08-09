@@ -47,6 +47,8 @@ router.HandleFunc("/coins", getAvailableCoins).Methods("GET")
 router.HandleFunc("/volatility/{coin_id}", getVolatility).Methods("GET")
 router.HandleFunc("/trend/{coin_id}", getTrend).Methods("GET")
 router.HandleFunc("/top-movers", getTopMovers).Methods("GET")
+router.HandleFunc("/ask", handleAsk).Methods("POST")
+
 
 
 
