@@ -26,6 +26,17 @@ export const AdvancedAnalytics = ({ selectedCoin }: AdvancedAnalyticsProps) => {
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
 
+  // Chat assistant state
+  type ChatRole = 'user' | 'assistant'
+  interface ChatMessage {
+    role: ChatRole
+    text?: string
+    results?: PriceData[]
+  }
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [aiQuestion, setAiQuestion] = useState<string>('')
+  const [aiLoading, setAiLoading] = useState<boolean>(false)
+
   const timeRanges = getCustomTimeRanges()
 
   const fetchAveragePrice = async (start: string, end: string) => {
@@ -124,6 +135,27 @@ export const AdvancedAnalytics = ({ selectedCoin }: AdvancedAnalyticsProps) => {
     e.preventDefault()
     if (customTimestamp) {
       fetchPriceAtTime(customTimestamp)
+    }
+  }
+
+  const handleAiAskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = aiQuestion.trim()
+    if (!trimmed) return
+    const userMessage: ChatMessage = { role: 'user', text: trimmed }
+    setMessages((prev) => [...prev, userMessage])
+    setAiLoading(true)
+    try {
+      const data = await ApiService.askAI(trimmed)
+      const assistantMessage: ChatMessage = { role: 'assistant', results: data }
+      setMessages((prev) => [...prev, assistantMessage])
+      setAiQuestion('')
+    } catch (err) {
+      console.error(err)
+      const errorMessage: ChatMessage = { role: 'assistant', text: 'Sorry, I could not process that request.' }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setAiLoading(false)
     }
   }
 
@@ -288,6 +320,65 @@ export const AdvancedAnalytics = ({ selectedCoin }: AdvancedAnalyticsProps) => {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* AI Chat Assistant */}
+        <div className="analytics-section chat-assistant">
+          <h3>Assistant</h3>
+          <div className="chat-container">
+            <div className="chat-window">
+              {messages.length === 0 && (
+                <div className="chat-empty">
+                  Ask about prices with natural language. Try: “Show {selectedCoin} prices for the last 15 minutes”.
+                </div>
+              )}
+              {messages.map((m, idx) => (
+                <div key={idx} className={`chat-message ${m.role}`}>
+                  <div className={`chat-bubble ${m.role}`}>
+                    {m.text && <p className="chat-text">{m.text}</p>}
+                    {m.results && m.results.length > 0 && (
+                      <div className="chat-results">
+                        <div className="results-header">
+                          <span>Coin</span>
+                          <span>Time</span>
+                          <span>Price</span>
+                        </div>
+                        {m.results.map((row, rIdx) => (
+                          <div key={rIdx} className="results-row">
+                            <span className="coin">{row.coin_id}</span>
+                            <span className="time">{formatTime(row.timestamp)}</span>
+                            <span className="price">{formatPrice(row.price_usd)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {aiLoading && (
+                <div className="chat-message assistant">
+                  <div className="chat-bubble assistant">
+                    <div className="typing">
+                      <span></span><span></span><span></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <form onSubmit={handleAiAskSubmit} className="chat-input-bar">
+              <input
+                type="text"
+                value={aiQuestion}
+                onChange={(e) => setAiQuestion(e.target.value)}
+                className="chat-input"
+                placeholder={`Ask about ${selectedCoin} prices...`}
+                disabled={aiLoading}
+              />
+              <button type="submit" className="send-button" disabled={aiLoading || !aiQuestion.trim()}>
+                Send
+              </button>
+            </form>
           </div>
         </div>
       </div>
