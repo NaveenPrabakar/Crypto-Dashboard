@@ -21,6 +21,10 @@ type PriceData struct {
     PriceUSD  float64   `json:"price_usd"`
 }
 
+type Subscriber struct {
+    Email string `json:"email"`
+}
+
 func main() {
     // Connect to Cassandra
 cluster := gocql.NewCluster("127.0.0.1")
@@ -48,6 +52,8 @@ router.HandleFunc("/volatility/{coin_id}", getVolatility).Methods("GET")
 router.HandleFunc("/trend/{coin_id}", getTrend).Methods("GET")
 router.HandleFunc("/top-movers", getTopMovers).Methods("GET")
 router.HandleFunc("/ask", handleAsk).Methods("POST")
+router.HandleFunc("/subscribe", addSubscriber).Methods("POST")
+
 
 
 
@@ -311,3 +317,38 @@ func getAvailableCoins(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(coins)
 }
+
+
+
+func addSubscriber(w http.ResponseWriter, r *http.Request) {
+    var sub Subscriber
+
+    if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+        http.Error(w, "Invalid request payload", http.StatusBadRequest)
+        return
+    }
+
+    if sub.Email == "" {
+        http.Error(w, "Email is required", http.StatusBadRequest)
+        return
+    }
+
+    err := session.Query(`
+        INSERT INTO email_subscribers (email, subscribed_at)
+        VALUES (?, ?)`,
+        sub.Email, time.Now(),
+    ).Exec()
+
+    if err != nil {
+        log.Printf("Error inserting subscriber: %v", err)
+        http.Error(w, "Failed to subscribe", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{
+        "message": "Subscription successful",
+        "email":   sub.Email,
+    })
+}
+
