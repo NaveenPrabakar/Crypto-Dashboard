@@ -6,8 +6,10 @@ import {
   ChartCard, 
   StatsCard, 
   AdvancedAnalytics, 
-  CoinManager 
+  CoinManager,
+  EmailSignup,
 } from './components'
+import { Routes, Route } from 'react-router-dom'
 import { ApiService } from './services/api'
 import type { PriceData, CoinInfo } from './types'
 import './App.css'
@@ -79,66 +81,73 @@ function App() {
       />
 
       <main className="main">
-        <div className="main-controls">
-          <CoinSelector 
-            coins={COINS}
-            selectedCoin={selectedCoin}
-            onCoinSelect={handleCoinSelect}
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                <div className="main-controls">
+                  <CoinSelector 
+                    coins={COINS}
+                    selectedCoin={selectedCoin}
+                    onCoinSelect={handleCoinSelect}
+                  />
+                  
+                  <div className="control-buttons">
+                    <button 
+                      onClick={() => setShowAdvancedAnalytics(!showAdvancedAnalytics)}
+                      className={`control-button ${showAdvancedAnalytics ? 'active' : ''}`}
+                    >
+                      {showAdvancedAnalytics ? 'Hide' : 'Show'} Advanced Analytics
+                    </button>
+                    <button 
+                      onClick={() => setShowCoinManager(!showCoinManager)}
+                      className={`control-button ${showCoinManager ? 'active' : ''}`}
+                    >
+                      {showCoinManager ? 'Hide' : 'Show'} Available Coins
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="error-message">
+                    {error}
+                  </div>
+                )}
+
+                {showCoinManager && (
+                  <div className="coin-manager-section">
+                    <CoinManager onCoinSelect={handleCoinSelect} />
+                  </div>
+                )}
+
+                <div className="dashboard-grid">
+                  <PriceCard 
+                    coinName={selectedCoinInfo?.name || selectedCoin}
+                    latestPrice={latestPrice}
+                    priceHistory={priceHistory}
+                  />
+
+                  <ChartCard 
+                    priceHistory={priceHistory}
+                    timeRange={timeRange}
+                    loading={loading}
+                    coinColor={selectedCoinInfo?.color || '#6b7280'}
+                  />
+
+                  <StatsCard priceHistory={priceHistory} />
+                </div>
+
+                {showAdvancedAnalytics && (
+                  <div className="advanced-analytics-section">
+                    <AdvancedAnalytics selectedCoin={selectedCoin} />
+                  </div>
+                )}
+              </>
+            }
           />
-          
-          <div className="control-buttons">
-            <button 
-              onClick={() => setShowAdvancedAnalytics(!showAdvancedAnalytics)}
-              className={`control-button ${showAdvancedAnalytics ? 'active' : ''}`}
-            >
-              {showAdvancedAnalytics ? 'Hide' : 'Show'} Advanced Analytics
-            </button>
-            <button 
-              onClick={() => setShowCoinManager(!showCoinManager)}
-              className={`control-button ${showCoinManager ? 'active' : ''}`}
-            >
-              {showCoinManager ? 'Hide' : 'Show'} Available Coins
-            </button>
-          </div>
-        </div>
-
-        {error && (
-          <div className="error-message">
-            {error}
-          </div>
-        )}
-
-        {showCoinManager && (
-          <div className="coin-manager-section">
-            <CoinManager onCoinSelect={handleCoinSelect} />
-          </div>
-        )}
-
-        <div className="dashboard-grid">
-          {/* Price Card */}
-          <PriceCard 
-            coinName={selectedCoinInfo?.name || selectedCoin}
-            latestPrice={latestPrice}
-            priceHistory={priceHistory}
-          />
-
-          {/* Chart Card */}
-          <ChartCard 
-            priceHistory={priceHistory}
-            timeRange={timeRange}
-            loading={loading}
-            coinColor={selectedCoinInfo?.color || '#6b7280'}
-          />
-
-          {/* Stats Card */}
-          <StatsCard priceHistory={priceHistory} />
-        </div>
-
-        {showAdvancedAnalytics && (
-          <div className="advanced-analytics-section">
-            <AdvancedAnalytics selectedCoin={selectedCoin} />
-          </div>
-        )}
+          <Route path="/subscribe" element={<EmailSignup />} />
+        </Routes>
       </main>
     </div>
   )

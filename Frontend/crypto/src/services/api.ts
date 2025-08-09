@@ -88,4 +88,19 @@ export class ApiService {
     }
     return response.json()
   }
+
+  static async subscribeToReports(email: string): Promise<{ message: string; email: string }> {
+    const response = await fetch(`${API_BASE_URL}/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    })
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(errorText || 'Failed to subscribe')
+    }
+    return response.json()
+  }
 } 
