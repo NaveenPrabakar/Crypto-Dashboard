@@ -1,4 +1,4 @@
-import type { PriceData, AveragePriceData, PriceRangeData } from '../types'
+import type { PriceData, AveragePriceData, PriceRangeData, VolatilityData, TrendData, TopMoverData } from '../types'
 
 const API_BASE_URL = 'http://localhost:8000'
 
@@ -71,6 +71,20 @@ export class ApiService {
     const response = await fetch(`${API_BASE_URL}/top-movers?minutes=${minutes}`)
     if (!response.ok) {
       throw new Error('Failed to fetch top movers data')
+    }
+    return response.json()
+  }
+
+  static async askAI(question: string): Promise<PriceData[]> {
+    const response = await fetch(`${API_BASE_URL}/ask`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=UTF-8',
+      },
+      body: question,
+    })
+    if (!response.ok) {
+      throw new Error('Failed to fetch AI query results')
     }
     return response.json()
   }
