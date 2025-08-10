@@ -53,6 +53,7 @@ router.HandleFunc("/trend/{coin_id}", getTrend).Methods("GET")
 router.HandleFunc("/top-movers", getTopMovers).Methods("GET")
 router.HandleFunc("/ask", handleAsk).Methods("POST")
 router.HandleFunc("/subscribe", addSubscriber).Methods("POST")
+router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
 
 
 
