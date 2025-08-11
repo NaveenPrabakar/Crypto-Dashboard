@@ -12,12 +12,15 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+	"net/smtp"
+	"crypto/tls"
 
 	"github.com/gocql/gocql"
 	"github.com/jung-kurt/gofpdf"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+	"encoding/base64"
 )
 
 // PricePoint is a single timestamped price.
@@ -52,10 +55,6 @@ type ReportInsights struct {
 // fetchYesterdayData queries Cassandra for the previous day's prices and
 // returns a MarketData map of coin -> []PricePoint (sorted ascending).
 func fetchYesterdayData() (MarketData, error) {
-	//now := time.Now().UTC()
-	//start := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, time.UTC)
-	//end := start.Add(24 * time.Hour)
-
 	data := make(MarketData)
 
 	iter := session.Query(`
@@ -393,9 +392,71 @@ func generateDailyReportPDF(tmpDir string) ([]byte, error) {
 
 // sendEmailWithAttachment is a stub for email sending (implement as needed).
 func sendEmailWithAttachment(to, subject, body string, attachment []byte, filename string) error {
-	// TODO: Implement actual email sending via SMTP or third-party API
-	log.Printf("Sending email to %s with subject %q and attachment %s (size %d bytes)", to, subject, filename, len(attachment))
-	return nil
+	from := os.Getenv("SMTP_EMAIL")
+	password := os.Getenv("SMTP_PASS")
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	auth := smtp.PlainAuth("", from, password, smtpHost)
+
+	var msg bytes.Buffer
+	boundary := "boundary123"
+
+	// Headers
+	msg.WriteString(fmt.Sprintf("From: %s\r\n", from))
+	msg.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	msg.WriteString("MIME-Version: 1.0\r\n")
+	msg.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=%s\r\n\r\n", boundary))
+
+	// Body
+	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	msg.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
+	msg.WriteString(body + "\r\n")
+
+	// Attachment
+	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	msg.WriteString(fmt.Sprintf("Content-Type: application/pdf; name=%q\r\n", filename))
+	msg.WriteString("Content-Transfer-Encoding: base64\r\n")
+	msg.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=%q\r\n\r\n", filename))
+
+	encoded := make([]byte, base64.StdEncoding.EncodedLen(len(attachment)))
+	base64.StdEncoding.Encode(encoded, attachment)
+	msg.Write(encoded)
+	msg.WriteString("\r\n")
+	msg.WriteString(fmt.Sprintf("--%s--", boundary))
+
+	addr := smtpHost + ":" + smtpPort
+    conn, err := smtp.Dial(addr)
+    if err != nil {
+        return err
+    }
+    defer conn.Close()
+
+    tlsConfig := &tls.Config{ServerName: smtpHost}
+    if err = conn.StartTLS(tlsConfig); err != nil {
+        return err
+    }
+
+    if err = conn.Auth(auth); err != nil {
+        return err
+    }
+
+    if err = conn.Mail(from); err != nil {
+        return err
+    }
+    if err = conn.Rcpt(to); err != nil {
+        return err
+    }
+
+    w, err := conn.Data()
+    if err != nil {
+        return err
+    }
+    if _, err = w.Write(msg.Bytes()); err != nil {
+        return err
+    }
+    return w.Close()
 }
 
 // sendDailyReports fetches emails and sends the daily report.
@@ -412,6 +473,8 @@ func sendDailyReports() {
 		if err := sendEmailWithAttachment(email, "Daily Crypto Report",
 			"Please find attached your daily market analysis.", pdfData, "report.pdf"); err != nil {
 			log.Printf("Failed to send email to %s: %v", email, err)
+		} else {
+			log.Printf("Sent report to %s", email)
 		}
 	}
 	iter.Close()
