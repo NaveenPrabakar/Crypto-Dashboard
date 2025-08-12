@@ -205,7 +205,7 @@ func getAveragePrice(w http.ResponseWriter, r *http.Request) {
 func getPriceAtTime(w http.ResponseWriter, r *http.Request) {
     vars := mux.Vars(r)
     coinID := vars["coin_id"]
-    tsStr := r.URL.Query().Get("timestamp") 
+    tsStr := r.URL.Query().Get("timestamp")
 
     ts, err := time.Parse(time.RFC3339, tsStr)
     if err != nil {
@@ -213,24 +213,29 @@ func getPriceAtTime(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    iter := session.Query(`
+    var data PriceData
+    err = session.Query(`
         SELECT coin_id, timestamp, price_usd
         FROM crypto_price_by_coin
-        WHERE coin_id = ? AND timestamp <= ? ALLOW FILTERING
-        LIMIT 1`, coinID, ts).
+        WHERE coin_id = ? AND timestamp <= ?
+        ORDER BY timestamp DESC
+        LIMIT 1 ALLOW FILTERING`,
+        coinID, ts).
         Consistency(gocql.One).
-        Iter()
+        Scan(&data.CoinID, &data.Timestamp, &data.PriceUSD)
 
-    var data PriceData
-    if iter.Scan(&data.CoinID, &data.Timestamp, &data.PriceUSD) {
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(data)
-    } else {
+    if err == gocql.ErrNotFound {
         http.Error(w, "Price data not found", http.StatusNotFound)
+        return
+    } else if err != nil {
+        http.Error(w, "Query error", http.StatusInternalServerError)
+        return
     }
 
-    iter.Close()
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(data)
 }
+
 
 func getPriceRange(w http.ResponseWriter, r *http.Request) {
     vars := mux.Vars(r)

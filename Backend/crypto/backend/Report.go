@@ -340,7 +340,7 @@ func buildPDF(insights ReportInsights, chartPaths []string) ([]byte, error) {
 	pdf.CellFormat(35, 8, "StdDev", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(35, 8, "Volatility", "1", 1, "C", true, 0, "")
 
-	maxSnapshot := 20
+	maxSnapshot := len(insights.CoinMetrics) // Typically 20
 	if len(insights.CoinMetrics) < maxSnapshot {
 		maxSnapshot = len(insights.CoinMetrics)
 	}

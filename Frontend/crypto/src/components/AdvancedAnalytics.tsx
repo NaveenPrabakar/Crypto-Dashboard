@@ -67,19 +67,24 @@ export const AdvancedAnalytics = ({ selectedCoin }: AdvancedAnalyticsProps) => {
     }
   }
 
-  const fetchPriceAtTime = async (timestamp: string) => {
-    setLoading(true)
-    setError('')
-    try {
-      const data = await ApiService.getPriceAtTime(selectedCoin, timestamp)
-      setPriceAtTime(data)
-    } catch (err) {
-      setError('Failed to fetch price at specified time')
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
+  const fetchPriceAtTime = async (timestamp: string | Date) => {
+  setLoading(true)
+  setError('')
+  try {
+    const isoString = typeof timestamp === 'string'
+      ? new Date(timestamp).toISOString()
+      : timestamp.toISOString();
+
+    const data = await ApiService.getPriceAtTime(selectedCoin, isoString)
+    setPriceAtTime(data)
+  } catch (err) {
+    setError('Failed to fetch price at specified time')
+    console.error(err)
+  } finally {
+    setLoading(false)
   }
+}
+
 
   const fetchVolatility = async (start: string, end: string) => {
     setLoading(true)
