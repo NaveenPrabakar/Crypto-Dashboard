@@ -70,7 +70,7 @@ fmt.Println("Connected to Cassandra")
 
     
     c := cron.New()
-    c.AddFunc("@every 1m", fetchAndStoreCryptoPrices)
+    c.AddFunc("@every 10m", fetchAndStoreCryptoPrices)
     c.Start()
 
     
