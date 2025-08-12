@@ -6,9 +6,13 @@ import (
     "log"
     "net/http"
     "time"
+    "os"
 
-    "github.com/gocql/gocql"
+    
     "github.com/robfig/cron/v3"
+    gocqlastra "github.com/datastax/gocql-astra"
+    "github.com/gocql/gocql"
+   
 )
 
 var session *gocql.Session
@@ -19,18 +23,50 @@ type CoinGeckoResponse map[string]struct {
 
 func main() {
     
-    cluster := gocql.NewCluster("host.docker.internal")
-    cluster.Keyspace = "iot_data"
-    cluster.Consistency = gocql.Quorum
-
     var err error
-    session, err = cluster.CreateSession()
-    if err != nil {
-        log.Fatalf("Failed to connect to Cassandra: %v", err)
-    }
-    defer session.Close()
 
-    fmt.Println("Connected to Cassandra")
+    var cluster *gocql.ClusterConfig
+
+    cluster, err = gocqlastra.NewClusterFromURL("https://api.astra.datastax.com", os.Getenv("ASTRA_DB_ID"), os.Getenv("ASTRA_DB_APPLICATION_TOKEN"), 10*time.Second)
+    cluster.Keyspace = "iot_data"
+
+
+
+    if err != nil {
+        log.Fatalf("unable to load cluster %s from astra: %v", os.Getenv("ASTRA_DB_APPLICATION_TOKEN"), err)
+    }
+
+    cluster.Timeout = 30 * time.Second
+    start := time.Now()
+    session, err = gocql.NewSession(*cluster)
+    elapsed := time.Now().Sub(start)
+
+    if err != nil {
+        log.Fatalf("unable to connect session: %v", err)
+    }
+
+    fmt.Println("Making the query now")
+
+    iter := session.Query("SELECT release_version FROM system.local").Iter()
+
+    var version string
+
+    for iter.Scan(&version) {
+        fmt.Println(version)
+    }
+
+    if err = iter.Close(); err != nil {
+        log.Printf("error running query: %v", err)
+    }
+
+    fmt.Printf("Connection process took %s", elapsed)
+
+    if err != nil {
+        log.Fatalf("unable to connect session: %v", err)
+    }
+
+
+fmt.Println("Connected to Cassandra")
 
     
     c := cron.New()
