@@ -97,7 +97,7 @@ router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
 
 
 c := cors.New(cors.Options{
-    AllowedOrigins:   []string{"http://localhost:5173"}, 
+    AllowedOrigins:   []string{"http://localhost:5173", "https://crypto-dashboard-five-blush.vercel.app"}, 
     AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
     AllowedHeaders:   []string{"*"},
     AllowCredentials: true,

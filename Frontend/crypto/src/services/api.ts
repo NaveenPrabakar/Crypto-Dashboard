@@ -1,6 +1,6 @@
 import type { PriceData, AveragePriceData, PriceRangeData, VolatilityData, TrendData, TopMoverData } from '../types'
 
-const API_BASE_URL = 'http://localhost:8000'
+const API_BASE_URL = 'https://crypto-dashboard-dkzi.onrender.com'
 
 export class ApiService {
   static async getLatestPrice(coinId: string): Promise<PriceData> {
