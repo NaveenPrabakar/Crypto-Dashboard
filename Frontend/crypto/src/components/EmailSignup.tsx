@@ -30,6 +30,11 @@ export const EmailSignup = () => {
     }
   }
 
+  const handleBack = () => {
+    window.history.back()
+  }
+
+
   return (
     <div className="card" style={{ maxWidth: 560, margin: '0 auto' }}>
       <div className="card-header">
@@ -62,6 +67,23 @@ export const EmailSignup = () => {
           {error}
         </div>
       )}
+
+      <div style={{ marginTop: '1.5rem' }}>
+        <button
+          type="button"
+          onClick={handleBack}
+          style={{
+            padding: '0.5rem 1rem',
+            background: '#001f3f', 
+            color: '#ffffff',      
+            border: 'none',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+          }}
+        >
+          ← Back
+        </button>
+      </div>
     </div>
   )
 }
