@@ -103,4 +103,19 @@ export class ApiService {
     }
     return response.json()
   }
+
+  static async unsubscribeFromReports(email: string): Promise<{ message: string; email: string }> {
+    const response = await fetch(`${API_BASE_URL}/unsubscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    })
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(errorText || 'Failed to unsubscribe')
+    }
+    return response.json()
+  }
 } 

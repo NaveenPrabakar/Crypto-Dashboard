@@ -7,7 +7,7 @@ export const EmailSignup = () => {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault()
     setMessage('')
     setError('')
@@ -30,10 +30,30 @@ export const EmailSignup = () => {
     }
   }
 
+  const handleUnsubscribe = async () => {
+    setMessage('')
+    setError('')
+    const emailTrimmed = email.trim()
+    if (!emailTrimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+      setError('Please enter a valid email address to unsubscribe')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await ApiService.unsubscribeFromReports(emailTrimmed)
+      setMessage(res.message || 'Successfully unsubscribed')
+      setEmail('')
+    } catch (err: any) {
+      setError(err?.message || 'Failed to unsubscribe')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleBack = () => {
     window.history.back()
   }
-
 
   return (
     <div className="card" style={{ maxWidth: 560, margin: '0 auto' }}>
@@ -44,7 +64,7 @@ export const EmailSignup = () => {
       <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
         Get a daily summary of crypto prices and trends delivered to your inbox.
       </p>
-      <form onSubmit={handleSubmit} className="timestamp-form" style={{ marginBottom: 0 }}>
+      <form onSubmit={handleSubscribe} className="timestamp-form" style={{ marginBottom: 0 }}>
         <input
           type="email"
           className="timestamp-input"
@@ -54,9 +74,27 @@ export const EmailSignup = () => {
           aria-label="Email address"
         />
         <button className="submit-button" type="submit" disabled={loading}>
-          {loading ? 'Subscribing…' : 'Subscribe'}
+          {loading ? 'Processing…' : 'Subscribe'}
         </button>
       </form>
+
+      <button
+        type="button"
+        onClick={handleUnsubscribe}
+        disabled={loading}
+        style={{
+          marginTop: '0.75rem',
+          padding: '0.5rem 1rem',
+          background: '#ff4136',
+          color: '#ffffff',
+          border: 'none',
+          borderRadius: '0.375rem',
+          cursor: 'pointer',
+        }}
+      >
+        {loading ? 'Processing…' : 'Unsubscribe'}
+      </button>
+
       {message && (
         <div className="success-message" style={{ marginTop: '1rem', color: '#10b981' }}>
           {message}
@@ -74,8 +112,8 @@ export const EmailSignup = () => {
           onClick={handleBack}
           style={{
             padding: '0.5rem 1rem',
-            background: '#001f3f', 
-            color: '#ffffff',      
+            background: '#001f3f',
+            color: '#ffffff',
             border: 'none',
             borderRadius: '0.375rem',
             cursor: 'pointer',
@@ -87,4 +125,3 @@ export const EmailSignup = () => {
     </div>
   )
 }
-

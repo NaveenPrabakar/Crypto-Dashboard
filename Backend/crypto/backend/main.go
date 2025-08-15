@@ -88,6 +88,8 @@ router.HandleFunc("/top-movers", getTopMovers).Methods("GET")
 router.HandleFunc("/ask", handleAsk).Methods("POST")
 router.HandleFunc("/subscribe", addSubscriber).Methods("POST")
 router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
+router.HandleFunc("/unsubscribe", removeSubscriber).Methods("POST")
+
 
 
 
@@ -391,4 +393,38 @@ func addSubscriber(w http.ResponseWriter, r *http.Request) {
         "email":   sub.Email,
     })
 }
+
+
+func removeSubscriber(w http.ResponseWriter, r *http.Request) {
+    var sub Subscriber
+
+    if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+        http.Error(w, "Invalid request payload", http.StatusBadRequest)
+        return
+    }
+
+    if sub.Email == "" {
+        http.Error(w, "Email is required", http.StatusBadRequest)
+        return
+    }
+
+    // Delete subscriber from Cassandra
+    err := session.Query(`
+        DELETE FROM email_subscribers WHERE email = ?`,
+        sub.Email,
+    ).Exec()
+
+    if err != nil {
+        log.Printf("Error deleting subscriber: %v", err)
+        http.Error(w, "Failed to unsubscribe", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{
+        "message": "Successfully unsubscribed",
+        "email":   sub.Email,
+    })
+}
+
 
