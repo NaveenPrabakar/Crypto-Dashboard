@@ -16,6 +16,18 @@ export const ChartCard = ({ priceHistory, timeRange, loading, coinColor }: Chart
     timestamp: new Date(item.timestamp).getTime()
   })).sort((a, b) => a.timestamp - b.timestamp)
 
+  let domainMin: number | 'auto' = 'auto'
+  let domainMax: number | 'auto' = 'auto'
+
+  if (chartData.length > 0) {
+    const prices = chartData.map(d => d.price)
+    const minPrice = Math.min(...prices)
+    const maxPrice = Math.max(...prices)
+    const padding = (maxPrice - minPrice) * 0.05 || minPrice * 0.001 
+    domainMin = minPrice - padding
+    domainMax = maxPrice + padding
+  }
+
   return (
     <div className="card chart-card">
       <div className="card-header">
@@ -46,6 +58,7 @@ export const ChartCard = ({ priceHistory, timeRange, loading, coinColor }: Chart
                 fontSize={12}
                 tickLine={false}
                 tickFormatter={(value) => `$${value.toFixed(2)}`}
+                domain={[domainMin, domainMax]}
               />
               <Tooltip 
                 contentStyle={{
