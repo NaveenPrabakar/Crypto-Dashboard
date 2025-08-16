@@ -156,25 +156,26 @@ func trendDescription(slope float64) string {
     }
 }
 
-// Top Movers Endpoint
 func getTopMovers(w http.ResponseWriter, r *http.Request) {
-    minutesParam := r.URL.Query().Get("minutes")
-    minutes := 60
-    if minutesParam != "" {
-        if m, err := strconv.Atoi(minutesParam); err == nil {
+    minutes := 1440
+    if v := r.URL.Query().Get("minutes"); v != "" {
+        if m, err := strconv.Atoi(v); err == nil && m > 0 {
             minutes = m
         }
     }
 
-    since := time.Now().Add(-time.Duration(minutes) * time.Minute)
+    since := time.Now().UTC().Add(-time.Duration(minutes) * time.Minute)
 
     iter := session.Query(`SELECT DISTINCT coin_id FROM crypto_price_by_coin`).Iter()
-    var coinID string
     var coins []string
+    var coinID string
     for iter.Scan(&coinID) {
         coins = append(coins, coinID)
     }
-    iter.Close()
+    if err := iter.Close(); err != nil {
+        http.Error(w, "failed to fetch coin list", http.StatusInternalServerError)
+        return
+    }
 
     type CoinChange struct {
         CoinID string  `json:"coin_id"`
@@ -189,20 +190,28 @@ func getTopMovers(w http.ResponseWriter, r *http.Request) {
         var startPrice, endPrice float64
         var foundStart, foundEnd bool
 
+        // Price at or before boundary
         err := session.Query(`
-            SELECT price_usd FROM crypto_price_by_coin 
-            WHERE coin_id = ? AND timestamp >= ? 
-            LIMIT 1 ALLOW FILTERING`, coin, since).
+            SELECT price_usd
+            FROM crypto_price_by_coin
+            WHERE coin_id = ? AND timestamp <= ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        `, coin, since).
             Consistency(gocql.One).
             Scan(&startPrice)
         if err == nil {
             foundStart = true
         }
 
+        // Latest price
         err = session.Query(`
-            SELECT price_usd FROM crypto_price_by_coin 
-            WHERE coin_id = ? 
-            LIMIT 1`, coin).
+            SELECT price_usd
+            FROM crypto_price_by_coin
+            WHERE coin_id = ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        `, coin).
             Consistency(gocql.One).
             Scan(&endPrice)
         if err == nil {
@@ -220,10 +229,11 @@ func getTopMovers(w http.ResponseWriter, r *http.Request) {
         }
     }
 
+    // Sort by largest absolute change
     sort.Slice(movers, func(i, j int) bool {
         return math.Abs(movers[i].Change) > math.Abs(movers[j].Change)
     })
 
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(movers)
+    _ = json.NewEncoder(w).Encode(movers)
 }

@@ -309,7 +309,7 @@ export const AdvancedAnalytics = ({ selectedCoin }: AdvancedAnalyticsProps) => {
 
         {/* Top Movers */}
         <div className="analytics-section">
-          <h3>Top Movers (Last Hour)</h3>
+          <h3>Top Movers (Last 24 hours)</h3>
           <button onClick={fetchTopMovers} className="refresh-button">
             Refresh
           </button>

@@ -67,7 +67,7 @@ export class ApiService {
     return response.json()
   }
 
-  static async getTopMovers(minutes: number = 60): Promise<TopMoverData[]> {
+  static async getTopMovers(minutes: number = 1440): Promise<TopMoverData[]> {
     const response = await fetch(`${API_BASE_URL}/top-movers?minutes=${minutes}`)
     if (!response.ok) {
       throw new Error('Failed to fetch top movers data')
