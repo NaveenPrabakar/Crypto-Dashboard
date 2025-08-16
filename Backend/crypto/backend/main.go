@@ -92,7 +92,7 @@ router.HandleFunc("/subscribe", addSubscriber).Methods("POST")
 router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
 router.HandleFunc("/unsubscribe", removeSubscriber).Methods("POST")
 router.HandleFunc("/verify", verifyEmail).Methods("GET")
-router.HandleFunc("/ping", pingHandler).Methods("GET")
+router.HandleFunc("/ping", pingHandler).Methods("GET", "HEAD")
 
 
 
