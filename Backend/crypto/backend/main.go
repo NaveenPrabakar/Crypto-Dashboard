@@ -513,9 +513,16 @@ func removeSubscriber(w http.ResponseWriter, r *http.Request) {
 }
 
 func pingHandler(w http.ResponseWriter, r *http.Request) {
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("pong"))
+    switch r.Method {
+    case http.MethodGet:
+        w.Write([]byte("pong"))
+    case http.MethodHead:
+        w.WriteHeader(http.StatusOK)
+    default:
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+    }
 }
+
 
 
 
