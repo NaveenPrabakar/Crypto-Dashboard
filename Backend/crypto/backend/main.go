@@ -385,7 +385,7 @@ func addSubscriber(w http.ResponseWriter, r *http.Request) {
 
     
     err := session.Query(`
-        INSERT INTO iot_data.staging_subscribers (verification_token, email, created_at)
+        INSERT INTO iot_data.staging_subscribers (token, email, created_at)
         VALUES (?, ?, ?)`,
         token, sub.Email, createdAt,
     ).Exec()
@@ -434,7 +434,7 @@ func verifyEmail(w http.ResponseWriter, r *http.Request) {
     err := session.Query(`
         SELECT email, created_at
         FROM iot_data.staging_subscribers
-        WHERE verification_token = ?`,
+        WHERE token = ?`,
         token,
     ).Scan(&email, &createdAt)
 
@@ -465,7 +465,7 @@ func verifyEmail(w http.ResponseWriter, r *http.Request) {
     
     err = session.Query(`
         DELETE FROM iot_data.staging_subscribers
-        WHERE verification_token = ?`,
+        WHERE token = ?`,
         token,
     ).Exec()
     if err != nil {
