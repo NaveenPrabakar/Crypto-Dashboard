@@ -92,6 +92,8 @@ router.HandleFunc("/subscribe", addSubscriber).Methods("POST")
 router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
 router.HandleFunc("/unsubscribe", removeSubscriber).Methods("POST")
 router.HandleFunc("/verify", verifyEmail).Methods("GET")
+router.HandleFunc("/ping", pingHandler).Methods("GET")
+
 
 
 
@@ -509,5 +511,11 @@ func removeSubscriber(w http.ResponseWriter, r *http.Request) {
         "email":   sub.Email,
     })
 }
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("pong"))
+}
+
 
 
