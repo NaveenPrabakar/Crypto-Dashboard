@@ -103,7 +103,7 @@ router.HandleFunc("/verify", verifyEmail).Methods("GET")
 
 
 c := cors.New(cors.Options{
-    AllowedOrigins:   []string{"http://localhost:5173", "https://crypto-dashboard-five-blush.vercel.app"}, 
+    AllowedOrigins:   []string{"*"}, 
     AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
     AllowedHeaders:   []string{"*"},
     AllowCredentials: true,
