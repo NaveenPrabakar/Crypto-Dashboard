@@ -92,6 +92,8 @@ router.HandleFunc("/subscribe", addSubscriber).Methods("POST")
 router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
 router.HandleFunc("/unsubscribe", removeSubscriber).Methods("POST")
 router.HandleFunc("/verify", verifyEmail).Methods("GET")
+router.HandleFunc("/ping", pingHandler).Methods("GET", "HEAD")
+
 
 
 
@@ -103,7 +105,7 @@ router.HandleFunc("/verify", verifyEmail).Methods("GET")
 
 
 c := cors.New(cors.Options{
-    AllowedOrigins:   []string{"http://localhost:5173", "https://crypto-dashboard-five-blush.vercel.app"}, 
+    AllowedOrigins:   []string{"*"}, 
     AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
     AllowedHeaders:   []string{"*"},
     AllowCredentials: true,
@@ -509,5 +511,18 @@ func removeSubscriber(w http.ResponseWriter, r *http.Request) {
         "email":   sub.Email,
     })
 }
+
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+    switch r.Method {
+    case http.MethodGet:
+        w.Write([]byte("pong"))
+    case http.MethodHead:
+        w.WriteHeader(http.StatusOK)
+    default:
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+    }
+}
+
+
 
 
