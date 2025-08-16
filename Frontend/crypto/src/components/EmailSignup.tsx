@@ -21,7 +21,7 @@ export const EmailSignup = () => {
     setLoading(true)
     try {
       const res = await ApiService.subscribeToReports(emailTrimmed)
-      setMessage(res.message || 'Subscription successful')
+      setMessage(res.message || 'Subscription initiated! Please check your email to verify.')
       setEmail('')
     } catch (err: any) {
       setError(err?.message || 'Failed to subscribe')

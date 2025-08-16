@@ -8,6 +8,7 @@ import (
     "strconv"
     "time"
     "os"
+    "net/smtp"
 
 
     
@@ -89,6 +90,8 @@ router.HandleFunc("/ask", handleAsk).Methods("POST")
 router.HandleFunc("/subscribe", addSubscriber).Methods("POST")
 router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
 router.HandleFunc("/unsubscribe", removeSubscriber).Methods("POST")
+router.HandleFunc("/verify", verifyEmail).Methods("GET")
+
 
 
 
@@ -375,23 +378,102 @@ func addSubscriber(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    err := session.Query(`
-        INSERT INTO email_subscribers (email, subscribed_at)
-        VALUES (?, ?)`,
-        sub.Email, time.Now(),
-    ).Exec()
+    
+    token := uuid.New().String()
+    createdAt := time.Now()
 
+    
+    err := session.Query(`
+        INSERT INTO iot_data.staging_subscribers (verification_token, email, created_at)
+        VALUES (?, ?, ?)`,
+        token, sub.Email, createdAt,
+    ).Exec()
     if err != nil {
-        log.Printf("Error inserting subscriber: %v", err)
+        log.Printf("Error inserting subscriber into staging: %v", err)
         http.Error(w, "Failed to subscribe", http.StatusInternalServerError)
         return
     }
 
+    
+    verificationLink := fmt.Sprintf("https://crypto-dashboard-dkzi.onrender.com/verify?token=%s", token)
+    if err := sendVerificationEmail(sub.Email, verificationLink); err != nil {
+        log.Printf("Error sending verification email: %v", err)
+        http.Error(w, "Failed to send verification email", http.StatusInternalServerError)
+        return
+    }
+
+    // Respond success
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{
-        "message": "Subscription successful",
+        "message": "Verification email sent! Please check your inbox.",
         "email":   sub.Email,
     })
+}
+
+func sendVerificationEmail(to, link string) error {
+    from := os.Getenv("SMTP_EMAIL")
+    pass := os.Getenv("SMTP_PASS")
+
+    msg := []byte(fmt.Sprintf("Subject: Verify your email\n\nClick this link to verify your subscription:\n%s", link))
+    auth := smtp.PlainAuth("", from, pass, "smtp.gmail.com")
+    return smtp.SendMail("smtp.gmail.com:587", auth, from, []string{to}, msg)
+}
+
+func verifyEmail(w http.ResponseWriter, r *http.Request) {
+    
+    token := r.URL.Query().Get("token")
+    if token == "" {
+        http.Error(w, "Token is required", http.StatusBadRequest)
+        return
+    }
+
+   
+    var email string
+    var createdAt time.Time
+    err := session.Query(`
+        SELECT email, created_at
+        FROM iot_data.staging_subscribers
+        WHERE verification_token = ?`,
+        token,
+    ).Scan(&email, &createdAt)
+
+    if err != nil {
+        log.Printf("Invalid or expired token: %v", err)
+        http.Error(w, "Invalid or expired token", http.StatusBadRequest)
+        return
+    }
+
+    
+    if time.Since(createdAt) > 30*time.Minute {
+        http.Error(w, "Token expired", http.StatusBadRequest)
+        return
+    }
+
+    
+    err = session.Query(`
+        INSERT INTO iot_data.email_subscribers (email, subscribed_at)
+        VALUES (?, ?)`,
+        email, time.Now(),
+    ).Exec()
+    if err != nil {
+        log.Printf("Error adding verified email: %v", err)
+        http.Error(w, "Failed to verify email", http.StatusInternalServerError)
+        return
+    }
+
+    
+    err = session.Query(`
+        DELETE FROM iot_data.staging_subscribers
+        WHERE verification_token = ?`,
+        token,
+    ).Exec()
+    if err != nil {
+        log.Printf("Error deleting token from staging: %v", err)
+    }
+
+    
+    w.Header().Set("Content-Type", "text/plain")
+    w.Write([]byte("Email verified!"))
 }
 
 
