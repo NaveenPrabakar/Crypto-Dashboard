@@ -93,6 +93,7 @@ router.HandleFunc("/generate-report", generateReportHandler).Methods("GET")
 router.HandleFunc("/unsubscribe", removeSubscriber).Methods("POST")
 router.HandleFunc("/verify", verifyEmail).Methods("GET")
 router.HandleFunc("/ping", pingHandler).Methods("GET", "HEAD")
+router.HandleFunc("/verifyDel", verifyEmailDel).Methods("GET")
 
 
 
@@ -422,6 +423,15 @@ func sendVerificationEmail(to, link string) error {
     return smtp.SendMail("smtp.gmail.com:587", auth, from, []string{to}, msg)
 }
 
+func sendVerificationEmailDel(to, link string) error {
+    from := os.Getenv("SMTP_EMAIL")
+    pass := os.Getenv("SMTP_PASS")
+
+    msg := []byte(fmt.Sprintf("Subject: Verify your email\n\nClick this link to revoke your subscription:\n%s", link))
+    auth := smtp.PlainAuth("", from, pass, "smtp.gmail.com")
+    return smtp.SendMail("smtp.gmail.com:587", auth, from, []string{to}, msg)
+}
+
 func verifyEmail(w http.ResponseWriter, r *http.Request) {
     
     token := r.URL.Query().Get("token")
@@ -493,21 +503,33 @@ func removeSubscriber(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Delete subscriber from Cassandra
-    err := session.Query(`
-        DELETE FROM email_subscribers WHERE email = ?`,
-        sub.Email,
-    ).Exec()
+    
+    token := uuid.New().String()
+    createdAt := time.Now()
 
+    
+    err := session.Query(`
+        INSERT INTO iot_data.staging_subscribers ("token", email, created_at)
+        VALUES (?, ?, ?)`,
+        token, sub.Email, createdAt,
+    ).Exec()
     if err != nil {
-        log.Printf("Error deleting subscriber: %v", err)
-        http.Error(w, "Failed to unsubscribe", http.StatusInternalServerError)
+        log.Printf("Error inserting subscriber into staging: %v", err)
+        http.Error(w, "Failed to subscribe", http.StatusInternalServerError)
         return
     }
 
+    verificationLink := fmt.Sprintf("https://crypto-dashboard-dkzi.onrender.com/verifyDel?token=%s", token)
+    if err := sendVerificationEmailDel(sub.Email, verificationLink); err != nil {
+        log.Printf("Error sending verification email: %v", err)
+        http.Error(w, "Failed to send verification email", http.StatusInternalServerError)
+        return
+    }
+
+    // Respond success
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{
-        "message": "Successfully unsubscribed",
+        "message": "Verification email sent! Please check your inbox.",
         "email":   sub.Email,
     })
 }
@@ -522,6 +544,67 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
     }
 }
+
+
+
+
+func verifyEmailDel(w http.ResponseWriter, r *http.Request) {
+    
+    token := r.URL.Query().Get("token")
+    if token == "" {
+        http.Error(w, "Token is required", http.StatusBadRequest)
+        return
+    }
+
+   
+    var email string
+    var createdAt time.Time
+    err := session.Query(`
+        SELECT email, created_at
+        FROM iot_data.staging_subscribers
+        WHERE "token" = ?`,
+        token,
+    ).Scan(&email, &createdAt)
+
+    if err != nil {
+        log.Printf("Invalid or expired token: %v", err)
+        http.Error(w, "Invalid or expired token", http.StatusBadRequest)
+        return
+    }
+
+    
+    if time.Since(createdAt) > 30*time.Minute {
+        http.Error(w, "Token expired", http.StatusBadRequest)
+        return
+    }
+
+    
+    err = session.Query(`
+        DELETE FROM iot_data.email_subscribers Where email = ?`,
+        email,
+    ).Exec()
+    if err != nil {
+        log.Printf("Error adding verified email: %v", err)
+        http.Error(w, "Failed to remove email", http.StatusInternalServerError)
+        return
+    }
+    
+    err = session.Query(`
+        DELETE FROM iot_data.staging_subscribers
+        WHERE "token" = ?`,
+        token,
+    ).Exec()
+    if err != nil {
+        log.Printf("Error deleting token from staging: %v", err)
+    }
+
+    
+    w.Header().Set("Content-Type", "text/plain")
+    w.Write([]byte("Subscription removal verified!"))
+}
+
+
+
 
 
 
