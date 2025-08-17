@@ -415,21 +415,51 @@ func addSubscriber(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendVerificationEmail(to, link string) error {
-    from := os.Getenv("SMTP_EMAIL")
-    pass := os.Getenv("SMTP_PASS")
+	from := os.Getenv("SMTP_EMAIL")
+	pass := os.Getenv("SMTP_PASS")
 
-    msg := []byte(fmt.Sprintf("Subject: Verify your email\n\nClick this link to verify your subscription:\n%s", link))
-    auth := smtp.PlainAuth("", from, pass, "smtp.gmail.com")
-    return smtp.SendMail("smtp.gmail.com:587", auth, from, []string{to}, msg)
+	msg := []byte(fmt.Sprintf(`Subject: Confirm Your Subscription - Crypto Dashboard
+
+Hello,
+
+You (or someone using your email) requested to subscribe to daily crypto market reports
+from our Crypto Dashboard.
+
+Please confirm your subscription by clicking the link below:
+%s
+
+If you did not request this, you can safely ignore this email and no action will be taken.
+
+Thank you,  
+Crypto Dashboard Team
+`, link))
+
+	auth := smtp.PlainAuth("", from, pass, "smtp.gmail.com")
+	return smtp.SendMail("smtp.gmail.com:587", auth, from, []string{to}, msg)
 }
 
 func sendVerificationEmailDel(to, link string) error {
-    from := os.Getenv("SMTP_EMAIL")
-    pass := os.Getenv("SMTP_PASS")
+	from := os.Getenv("SMTP_EMAIL")
+	pass := os.Getenv("SMTP_PASS")
 
-    msg := []byte(fmt.Sprintf("Subject: Verify your email\n\nClick this link to revoke your subscription:\n%s", link))
-    auth := smtp.PlainAuth("", from, pass, "smtp.gmail.com")
-    return smtp.SendMail("smtp.gmail.com:587", auth, from, []string{to}, msg)
+	msg := []byte(fmt.Sprintf(`Subject: Confirm Unsubscribe - Crypto Dashboard
+
+Hello,
+
+We received a request to unsubscribe you from daily crypto market reports
+from our Crypto Dashboard.
+
+If you would like to stop receiving these reports, please confirm by clicking the link below:
+%s
+
+If you did not request this change, you can safely ignore this email and your subscription will remain active.
+
+Thank you,  
+Crypto Dashboard Team
+`, link))
+
+	auth := smtp.PlainAuth("", from, pass, "smtp.gmail.com")
+	return smtp.SendMail("smtp.gmail.com:587", auth, from, []string{to}, msg)
 }
 
 func verifyEmail(w http.ResponseWriter, r *http.Request) {
