@@ -3,24 +3,27 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"image/color"
 	"log"
 	"math"
 	"net/http"
+	"net/smtp"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
-	"net/smtp"
-	"crypto/tls"
 
+	"context"
+	"encoding/base64"
 	"github.com/gocql/gocql"
 	"github.com/jung-kurt/gofpdf"
+	openai "github.com/sashabaranov/go-openai"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
-	"encoding/base64"
+	"strings"
 )
 
 // PricePoint is a single timestamped price.
@@ -37,10 +40,14 @@ type Insight struct {
 	CoinID        string
 	FirstPrice    float64
 	LastPrice     float64
-	PercentChange float64 // (last-first)/first * 100
+	PercentChange float64
 	AvgPrice      float64
-	StdDev        float64 // standard deviation of prices
-	Volatility    float64 // std dev of log returns (proxy)
+	StdDev        float64
+	Volatility    float64
+	MinPrice      float64
+	MaxPrice      float64
+	MedianPrice   float64
+	RangePct      float64
 	DataPoints    int
 }
 
@@ -90,7 +97,6 @@ func fetchYesterdayData(session *gocql.Session) (MarketData, error) {
 
 	return data, nil
 }
-
 
 // analyzeMarket computes insights (percent change, average, stddev, volatility) per coin.
 func analyzeMarket(data MarketData) ReportInsights {
@@ -148,6 +154,31 @@ func analyzeMarket(data MarketData) ReportInsights {
 			pctChange = (last - first) / first * 100
 		}
 
+		// Min/Max
+		minP, maxP := series[0].Price, series[0].Price
+		for _, p := range series {
+			if p.Price < minP {
+				minP = p.Price
+			}
+			if p.Price > maxP {
+				maxP = p.Price
+			}
+		}
+
+		// Median
+		sorted := make([]float64, len(series))
+		for i, p := range series {
+			sorted[i] = p.Price
+		}
+		sort.Float64s(sorted)
+		median := sorted[len(sorted)/2]
+
+		// Range %
+		rangePct := 0.0
+		if minP > 0 {
+			rangePct = (maxP - minP) / minP * 100
+		}
+
 		insights = append(insights, Insight{
 			CoinID:        coin,
 			FirstPrice:    first,
@@ -156,6 +187,10 @@ func analyzeMarket(data MarketData) ReportInsights {
 			AvgPrice:      avg,
 			StdDev:        stddev,
 			Volatility:    vol,
+			MinPrice:      minP,
+			MaxPrice:      maxP,
+			MedianPrice:   median,
+			RangePct:      rangePct,
 			DataPoints:    len(series),
 		})
 	}
@@ -251,109 +286,255 @@ func createCharts(data MarketData, maxCharts int, outDir string) ([]string, erro
 	return paths, nil
 }
 
-// buildPDF constructs a PDF report.
-func buildPDF(insights ReportInsights, chartPaths []string) ([]byte, error) {
+func buildPDF(insights ReportInsights, chartPaths []string, data MarketData) ([]byte, error) {
+
+	openaiClient := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetTitle("Daily Crypto Market Report", false)
-	pdf.SetAuthor("Your Platform Name", false)
+	pdf.SetAuthor("Crypto Analytics Platform", false)
 
+	// === Footer with page numbers ===
+	pdf.AliasNbPages("")
+	pdf.SetFooterFunc(func() {
+		pdf.SetY(-15)
+		pdf.SetFont("Helvetica", "I", 8)
+		pdf.CellFormat(0, 10, fmt.Sprintf("Page %d/{nb}", pdf.PageNo()), "", 0, "C", false, 0, "")
+	})
+
+	// === COVER PAGE ===
 	pdf.AddPage()
-	pdf.SetFont("Helvetica", "B", 20)
-	pdf.CellFormat(0, 10, "Daily Crypto Market Report", "", 1, "C", false, 0, "")
-	pdf.SetFont("Helvetica", "", 12)
-	dateStr := insights.Date.Format("2006-01-02 (UTC)")
-	pdf.CellFormat(0, 8, fmt.Sprintf("Date: %s", dateStr), "", 1, "C", false, 0, "")
-	pdf.Ln(6)
+	addBackground(pdf, "Image/background.jpg")
+	pdf.SetFont("Helvetica", "B", 24)
+	pdf.CellFormat(0, 15, "Daily Crypto Market Report", "", 1, "C", false, 0, "")
+	pdf.Ln(10)
 
-	if len(insights.TopGainers) > 0 {
-		g := insights.TopGainers[0]
-		summary := fmt.Sprintf("Top Gainer: %s (%.2f%%), Price: %.2f -> %.2f", g.CoinID, g.PercentChange, g.FirstPrice, g.LastPrice)
-		pdf.MultiCell(0, 6, summary, "", "C", false)
-		pdf.Ln(4)
+	pdf.SetFont("Helvetica", "I", 12)
+	pdf.CellFormat(0, 10, fmt.Sprintf("Generated on %s (UTC)", insights.Date.Format("2006-01-02")), "", 1, "C", false, 0, "")
+	pdf.Ln(15)
+
+	coverImg := "Image/image.png"
+	if _, err := os.Stat(coverImg); err == nil {
+		pdf.ImageOptions(coverImg, 55, 80, 100, 0, false,
+			gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}, 0, "")
 	}
 
-	pdf.AddPage()
-	pdf.SetFont("Helvetica", "B", 14)
-	pdf.CellFormat(0, 8, "Top Gainers", "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 11)
-	pdf.Ln(2)
+	// === Helper for section headers ===
+	sectionHeader := func(title string) {
+		pdf.SetTextColor(40, 70, 130)
+		pdf.SetFont("Helvetica", "B", 14)
+		pdf.CellFormat(0, 8, title, "", 1, "L", false, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+		pdf.Ln(3)
+	}
 
-	pdf.SetFillColor(240, 240, 240)
+	// === DAILY RANGE METRICS ===
+	pdf.AddPage()
+	addBackground(pdf, "Image/background.jpg")
+	sectionHeader("Daily Range Metrics")
+
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetFillColor(230, 230, 230)
+	pdf.CellFormat(30, 8, "Coin", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(30, 8, "Min", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(30, 8, "Max", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(30, 8, "Median", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(30, 8, "Range %", "1", 1, "C", true, 0, "")
+
+	pdf.SetFont("Helvetica", "", 9)
+
+	fill := false
+	for _, c := range insights.CoinMetrics {
+		if fill {
+			pdf.SetFillColor(245, 245, 245)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+		fill = !fill
+
+		pdf.CellFormat(30, 6, c.CoinID, "1", 0, "L", true, 0, "")
+		pdf.CellFormat(30, 6, fmt.Sprintf("%.4f", c.MinPrice), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(30, 6, fmt.Sprintf("%.4f", c.MaxPrice), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(30, 6, fmt.Sprintf("%.4f", c.MedianPrice), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(30, 6, fmt.Sprintf("%.2f%%", c.RangePct), "1", 1, "R", true, 0, "")
+	}
+
+	rows := [][]string{}
+	for _, c := range insights.CoinMetrics {
+		rows = append(rows, []string{
+			c.CoinID,
+			fmt.Sprintf("%.4f", c.MinPrice),
+			fmt.Sprintf("%.4f", c.MaxPrice),
+			fmt.Sprintf("%.4f", c.MedianPrice),
+			fmt.Sprintf("%.2f%%", c.RangePct),
+		})
+	}
+	analysis, _ := generateAnalysisFromOpenAI(context.Background(), openaiClient, "Daily Range Metrics", rows)
+
+	pdf.Ln(4)
+	pdf.SetFont("Helvetica", "I", 9)
+	pdf.MultiCell(0, 6, analysis, "", "L", false)
+
+	// === TOP GAINERS PAGE ===
+	pdf.AddPage()
+	addBackground(pdf, "Image/background.jpg")
+	sectionHeader("Top Gainers")
+
+	// Table headers
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetFillColor(230, 230, 230)
 	pdf.CellFormat(50, 8, "Coin", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(40, 8, "Percent Change", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(40, 8, "Avg Price", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(40, 8, "Volatility", "1", 1, "C", true, 0, "")
 
+	// Table rows (alternating background)
 	pdf.SetFont("Helvetica", "", 10)
+	fill = false
 	for _, g := range insights.TopGainers {
-		pdf.CellFormat(50, 7, g.CoinID, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(40, 7, fmt.Sprintf("%.2f%%", g.PercentChange), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(40, 7, fmt.Sprintf("%.4f", g.AvgPrice), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(40, 7, fmt.Sprintf("%.6f", g.Volatility), "1", 1, "R", false, 0, "")
+		if fill {
+			pdf.SetFillColor(245, 245, 245)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+		fill = !fill
+
+		pdf.CellFormat(50, 7, g.CoinID, "1", 0, "L", true, 0, "")
+		pdf.CellFormat(40, 7, fmt.Sprintf("%.2f%%", g.PercentChange), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(40, 7, fmt.Sprintf("%.4f", g.AvgPrice), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(40, 7, fmt.Sprintf("%.6f", g.Volatility), "1", 1, "R", true, 0, "")
 	}
 
-	pdf.Ln(6)
-	pdf.SetFont("Helvetica", "B", 14)
-	pdf.CellFormat(0, 8, "Top Losers", "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 10)
-	pdf.Ln(2)
+	// After drawing Top Gainers table
+	rows = [][]string{}
+	for _, g := range insights.TopGainers {
+		rows = append(rows, []string{
+			g.CoinID,
+			fmt.Sprintf("%.2f%%", g.PercentChange),
+			fmt.Sprintf("%.4f", g.AvgPrice),
+			fmt.Sprintf("%.6f", g.Volatility),
+		})
+	}
 
-	pdf.SetFillColor(240, 240, 240)
+	analysis, _ = generateAnalysisFromOpenAI(context.Background(), openaiClient, "Top Gainers", rows)
+
+	pdf.Ln(4)
+	pdf.SetFont("Helvetica", "I", 9)
+	pdf.MultiCell(0, 6, analysis, "", "L", false)
+
+	// === TOP LOSERS PAGE ===
+	pdf.AddPage()
+	addBackground(pdf, "Image/background.jpg")
+	sectionHeader("Top Losers")
+
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetFillColor(230, 230, 230)
 	pdf.CellFormat(50, 8, "Coin", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(40, 8, "Percent Change", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(40, 8, "Avg Price", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(40, 8, "Volatility", "1", 1, "C", true, 0, "")
 
+	pdf.SetFont("Helvetica", "", 10)
+	fill = false
 	for _, g := range insights.TopLosers {
-		pdf.CellFormat(50, 7, g.CoinID, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(40, 7, fmt.Sprintf("%.2f%%", g.PercentChange), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(40, 7, fmt.Sprintf("%.4f", g.AvgPrice), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(40, 7, fmt.Sprintf("%.6f", g.Volatility), "1", 1, "R", false, 0, "")
+		if fill {
+			pdf.SetFillColor(245, 245, 245)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+		fill = !fill
+
+		pdf.CellFormat(50, 7, g.CoinID, "1", 0, "L", true, 0, "")
+		pdf.CellFormat(40, 7, fmt.Sprintf("%.2f%%", g.PercentChange), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(40, 7, fmt.Sprintf("%.4f", g.AvgPrice), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(40, 7, fmt.Sprintf("%.6f", g.Volatility), "1", 1, "R", true, 0, "")
 	}
 
+	rows = [][]string{}
+	for _, g := range insights.TopLosers {
+		rows = append(rows, []string{
+			g.CoinID,
+			fmt.Sprintf("%.2f%%", g.PercentChange),
+			fmt.Sprintf("%.4f", g.AvgPrice),
+			fmt.Sprintf("%.6f", g.Volatility),
+		})
+	}
+	analysis, _ = generateAnalysisFromOpenAI(context.Background(), openaiClient, "Top Losers", rows)
+
+	pdf.Ln(4)
+	pdf.SetFont("Helvetica", "I", 9)
+	pdf.MultiCell(0, 6, analysis, "", "L", false)
+
+	// === CHART PAGES ===
 	for _, cp := range chartPaths {
-		pdf.AddPage()
 		if _, err := os.Stat(cp); err != nil {
 			continue
 		}
-		imgOpt := gofpdf.ImageOptions{
-			ReadDpi:   true,
-			ImageType: "PNG",
-		}
-		pdf.ImageOptions(cp, 15, 30, 180, 0, false, imgOpt, 0, "")
+		pdf.AddPage()
+		addBackground(pdf, "Image/background.jpg")
+		imgOpt := gofpdf.ImageOptions{ReadDpi: true, ImageType: "PNG"}
+		pdf.ImageOptions(cp, 15, 40, 180, 0, false, imgOpt, 0, "")
+		pdf.Ln(100)
+		pdf.SetFont("Helvetica", "I", 10)
+		pdf.CellFormat(0, 8, fmt.Sprintf("Price chart: %s", filepath.Base(cp)), "", 1, "C", false, 0, "")
+
+		coinName := strings.TrimSuffix(filepath.Base(cp), "_chart.png")
+		analysis, _ := generateChartAnalysis(context.Background(), openaiClient, coinName, data[coinName])
+		pdf.Ln(64)
+		pdf.MultiCell(0, 6, analysis, "", "L", false)
 	}
 
+	// === SNAPSHOT METRICS ===
 	pdf.AddPage()
-	pdf.SetFont("Helvetica", "B", 14)
-	pdf.CellFormat(0, 8, "Snapshot Metrics (Top coins)", "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 9)
-	pdf.Ln(2)
+	addBackground(pdf, "background.jpg")
+	sectionHeader("Snapshot Metrics (Top Coins)")
 
-	pdf.SetFillColor(240, 240, 240)
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetFillColor(230, 230, 230)
 	pdf.CellFormat(40, 8, "Coin", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(35, 8, "Change %", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(35, 8, "Avg", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(35, 8, "StdDev", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(35, 8, "Volatility", "1", 1, "C", true, 0, "")
 
-	maxSnapshot := len(insights.CoinMetrics) // Typically 20
-	if len(insights.CoinMetrics) < maxSnapshot {
-		maxSnapshot = len(insights.CoinMetrics)
-	}
-	for i := 0; i < maxSnapshot; i++ {
-		c := insights.CoinMetrics[i]
-		pdf.CellFormat(40, 6, c.CoinID, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(35, 6, fmt.Sprintf("%.2f%%", c.PercentChange), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(35, 6, fmt.Sprintf("%.4f", c.AvgPrice), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(35, 6, fmt.Sprintf("%.6f", c.StdDev), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(35, 6, fmt.Sprintf("%.6f", c.Volatility), "1", 1, "R", false, 0, "")
+	pdf.SetFont("Helvetica", "", 9)
+	fill = false
+	for _, c := range insights.CoinMetrics {
+		if fill {
+			pdf.SetFillColor(245, 245, 245)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+		fill = !fill
+
+		pdf.CellFormat(40, 6, c.CoinID, "1", 0, "L", true, 0, "")
+		pdf.CellFormat(35, 6, fmt.Sprintf("%.2f%%", c.PercentChange), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(35, 6, fmt.Sprintf("%.4f", c.AvgPrice), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(35, 6, fmt.Sprintf("%.6f", c.StdDev), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(35, 6, fmt.Sprintf("%.6f", c.Volatility), "1", 1, "R", true, 0, "")
 	}
 
+	rows = [][]string{}
+	for _, c := range insights.CoinMetrics {
+		rows = append(rows, []string{
+			c.CoinID,
+			fmt.Sprintf("%.2f%%", c.PercentChange),
+			fmt.Sprintf("%.4f", c.AvgPrice),
+			fmt.Sprintf("%.6f", c.StdDev),
+			fmt.Sprintf("%.6f", c.Volatility),
+		})
+	}
+	analysis, _ = generateAnalysisFromOpenAI(context.Background(), openaiClient, "Snapshot Metrics", rows)
+
+	pdf.Ln(4)
+	pdf.SetFont("Helvetica", "I", 9)
+	pdf.MultiCell(0, 6, analysis, "", "L", false)
+
+	// === OUTPUT ===
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
 		return nil, fmt.Errorf("pdf output error: %w", err)
 	}
-
 	return buf.Bytes(), nil
 }
 
@@ -374,7 +555,7 @@ func generateDailyReportPDF(tmpDir string) ([]byte, error) {
 		return nil, fmt.Errorf("create charts: %w", err)
 	}
 
-	pdfBytes, err := buildPDF(insights, chartPaths)
+	pdfBytes, err := buildPDF(insights, chartPaths, data)
 	if err != nil {
 		return nil, fmt.Errorf("build pdf: %w", err)
 	}
@@ -423,36 +604,36 @@ func sendEmailWithAttachment(to, subject, body string, attachment []byte, filena
 	msg.WriteString(fmt.Sprintf("--%s--", boundary))
 
 	addr := smtpHost + ":" + smtpPort
-    conn, err := smtp.Dial(addr)
-    if err != nil {
-        return err
-    }
-    defer conn.Close()
+	conn, err := smtp.Dial(addr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
 
-    tlsConfig := &tls.Config{ServerName: smtpHost}
-    if err = conn.StartTLS(tlsConfig); err != nil {
-        return err
-    }
+	tlsConfig := &tls.Config{ServerName: smtpHost}
+	if err = conn.StartTLS(tlsConfig); err != nil {
+		return err
+	}
 
-    if err = conn.Auth(auth); err != nil {
-        return err
-    }
+	if err = conn.Auth(auth); err != nil {
+		return err
+	}
 
-    if err = conn.Mail(from); err != nil {
-        return err
-    }
-    if err = conn.Rcpt(to); err != nil {
-        return err
-    }
+	if err = conn.Mail(from); err != nil {
+		return err
+	}
+	if err = conn.Rcpt(to); err != nil {
+		return err
+	}
 
-    w, err := conn.Data()
-    if err != nil {
-        return err
-    }
-    if _, err = w.Write(msg.Bytes()); err != nil {
-        return err
-    }
-    return w.Close()
+	w, err := conn.Data()
+	if err != nil {
+		return err
+	}
+	if _, err = w.Write(msg.Bytes()); err != nil {
+		return err
+	}
+	return w.Close()
 }
 
 // sendDailyReports fetches emails and sends the daily report.
@@ -493,5 +674,78 @@ func generateReportHandler(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := w.Write(pdfBytes); err != nil {
 		log.Printf("Error writing PDF response: %v", err)
+	}
+}
+
+func generateAnalysisFromOpenAI(ctx context.Context, client *openai.Client, tableName string, rows [][]string) (string, error) {
+	// Convert rows into a readable text block
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Table: %s\n", tableName))
+	for _, row := range rows {
+		b.WriteString(strings.Join(row, " | "))
+		b.WriteString("\n")
+	}
+
+	prompt := fmt.Sprintf(`You are a financial analyst. 
+Analyze the following table and provide a concise professional summary (2-3 sentences) suitable for a crypto market PDF report:
+
+%s`, b.String())
+
+	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: "gpt-4o-mini", // fast & cheap; could use gpt-4o if you want more detail
+		Messages: []openai.ChatCompletionMessage{
+			{Role: "system", Content: "You are a financial analyst that writes concise, professional summaries."},
+			{Role: "user", Content: prompt},
+		},
+		MaxTokens: 200,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return resp.Choices[0].Message.Content, nil
+}
+
+func generateChartAnalysis(ctx context.Context, client *openai.Client, coin string, series []PricePoint) (string, error) {
+	if len(series) == 0 {
+		return fmt.Sprintf("No price data available for %s.", coin), nil
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Coin: %s\n", coin))
+	b.WriteString("Timestamps and Prices:\n")
+	for i, p := range series {
+		if i >= 20 { // limit rows to avoid giant prompt
+			b.WriteString("... (truncated)\n")
+			break
+		}
+		b.WriteString(fmt.Sprintf("%s | %.4f\n", p.Timestamp.Format("15:04"), p.Price))
+	}
+
+	prompt := fmt.Sprintf(`You are a financial analyst. 
+Given the following intraday price series for %s, summarize the overall trend, volatility, and any key patterns. 
+Keep it to 2–3 professional sentences for a financial PDF report.
+
+%s`, coin, b.String())
+
+	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: "gpt-4o-mini",
+		Messages: []openai.ChatCompletionMessage{
+			{Role: "system", Content: "You are a financial analyst that writes concise, professional summaries."},
+			{Role: "user", Content: prompt},
+		},
+		MaxTokens: 200,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return resp.Choices[0].Message.Content, nil
+}
+
+func addBackground(pdf *gofpdf.Fpdf, patternPath string) {
+	if _, err := os.Stat(patternPath); err == nil {
+		pdf.ImageOptions(patternPath, 0, 0, 210, 297, false,
+			gofpdf.ImageOptions{ImageType: "JPG", ReadDpi: true}, 0, "")
 	}
 }

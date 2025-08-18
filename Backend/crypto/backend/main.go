@@ -17,9 +17,11 @@ import (
     "github.com/rs/cors"
     gocqlastra "github.com/datastax/gocql-astra"
     "github.com/gocql/gocql"
+
 )
 
 var session *gocql.Session
+
 
 type PriceData struct {
     CoinID    string    `json:"coin_id"`
@@ -36,6 +38,7 @@ func main() {
 var err error
 
     var cluster *gocql.ClusterConfig
+
 
     cluster, err = gocqlastra.NewClusterFromURL("https://api.astra.datastax.com", os.Getenv("ASTRA_DB_ID") , os.Getenv("ASTRA_DB_APPLICATION_TOKEN"), 10*time.Second)
     cluster.Keyspace = "iot_data"
