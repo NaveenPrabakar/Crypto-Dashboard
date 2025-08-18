@@ -648,7 +648,7 @@ func sendDailyReports() {
 	var email string
 	for iter.Scan(&email) {
 		if err := sendEmailWithAttachment(email, "Daily Crypto Report",
-			"Please find attached your daily market analysis.", pdfData, "report.pdf"); err != nil {
+			"Dear Subscriber,\n\nAttached is your daily market analysis prepared by the Crypto Dashboard team.\n\nBest regards,\nCrypto Dashboard Team", pdfData, "report.pdf"); err != nil {
 			log.Printf("Failed to send email to %s: %v", email, err)
 		} else {
 			log.Printf("Sent report to %s", email)
@@ -656,6 +656,7 @@ func sendDailyReports() {
 	}
 	iter.Close()
 }
+
 
 // generateReportHandler HTTP handler serves the PDF report.
 func generateReportHandler(w http.ResponseWriter, r *http.Request) {
