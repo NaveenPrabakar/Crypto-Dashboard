@@ -1,257 +1,261 @@
-## Crypto-Dashboard
+# Crypto Dashboard
 
-A full‑stack, real‑time crypto prices dashboard.
+A full-stack, real-time cryptocurrency analytics platform for tracking, analyzing, and reporting on major digital assets. Built for extensibility, automation, and professional reporting.
 
-- **Frontend**: React + TypeScript + Vite
-- **Backend**: Go (REST API)
-- **Database**: Apache Cassandra (time‑series table per coin)
-- **Ingestion**: Scheduled fetch from CoinGecko
-- **AI Query**: Natural language to CQL via OpenAI
+## Table of Contents
 
-### Features
-- **Live prices** and historical charts for popular coins
-- **Analytics**: average, min/max range, volatility (stddev), and regression‑based trend
-- **Top movers** over a selectable window
-- **AI query** endpoint that turns natural‑language questions into CQL and returns rows
+- [Features](#features)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Setup & Installation](#setup--installation)
+  - [Database](#database)
+  - [Backend](#backend)
+  - [Frontend](#frontend)
+- [API Reference](#api-reference)
+- [Daily Report Generation](#daily-report-generation)
+- [Email Subscription](#email-subscription)
+- [Cloud Deployment](#cloud-deployment)
+- [Development](#development)
+- [Demo](#demo)
+- [License](#license)
 
----
+## Features
+
+- **Live Price Tracking:** Real-time and historical price data for major cryptocurrencies
+- **Advanced Analytics:** Volatility, trend, min/max, averages, and top movers
+- **AI Query:** Natural language to CQL queries via OpenAI for custom analytics
+- **PDF Reporting:** Automated, professional daily PDF reports with charts and AI-generated summaries
+- **Email Subscription:** Users can subscribe/unsubscribe to daily reports
+- **Modern UI:** Responsive React dashboard with interactive charts and analytics
 
 ## Architecture
 
-- `Backend/crypto/backend/main.go`: HTTP API server on port `8000`, CORS to `http://localhost:5173`.
-- `Backend/crypto/backend/crypto.go`: Ingestion worker. Every minute pulls prices from CoinGecko and inserts into Cassandra.
-- `Backend/crypto/backend/analytics.go`: Volatility, trend, and top movers endpoints.
-- `Backend/crypto/backend/AI.go`: `/ask` endpoint calling OpenAI to generate CQL.
-- `Frontend/crypto`: React app (Vite). Talks to API at `http://localhost:8000` (see `src/services/api.ts`).
-- `Database/Create_Crypto_table.cql`: Table DDL.
+- **Frontend:** React + TypeScript + Vite ([Frontend/crypto](Frontend/crypto))
+- **Backend:** Go HTTP API ([Backend/crypto/backend](Backend/crypto/backend))
+- **Database:** Apache Cassandra (time-series tables per coin)
+- **Ingestion:** Scheduled fetch from CoinGecko API
+- **AI Integration:** OpenAI GPT for analytics summaries and NL queries
 
-Data model (Cassandra):
+## Project Structure
 
-```sql
-CREATE TABLE iot_data.crypto_price_by_coin (
-  coin_id text,
-  timestamp timestamp,
-  price_usd double,
-  PRIMARY KEY (coin_id, timestamp)
-) WITH CLUSTERING ORDER BY (timestamp DESC);
+```
+Crypto-Dashboard/
+├── Backend/
+│   └── crypto/
+│       └── backend/
+│           ├── AI.go
+│           ├── analytics.go
+│           ├── crypto.go
+│           ├── Docker_setup.sh
+│           ├── Dockerfile
+│           ├── go.mod
+│           ├── go.sum
+│           ├── main.go
+│           ├── Report.go
+│           └── Image/
+├── Database/
+│   ├── Create_Crypto_table.cql
+│   ├── Email_subscribers.cql
+│   └── Email_Verify_table.cql
+├── Documents/
+│   ├── Dashboard_demo.mp4
+│   ├── Demo_video.txt
+│   └── report_example.pdf
+├── Frontend/
+│   └── crypto/
+│       ├── public/
+│       ├── src/
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── vite.config.ts
+├── .gitignore
+└── README.md
 ```
 
-Notes:
-- Several queries use `ALLOW FILTERING` for simplicity. For production, model additional tables or materialized views to avoid filtering.
-- The ingestion worker connects to Cassandra at `host.docker.internal` (for Docker). The HTTP server connects to `127.0.0.1`. Adjust as needed.
+## Setup & Installation
 
----
+### Database
 
-## Prerequisites
-- Go 1.22+
-- Node.js 18+ and npm
-- Apache Cassandra 4.x (local or remote)
-- Optional: Docker Desktop (to run the ingestion worker in a container)
-- For AI endpoint: an OpenAI API key
+1. **Install Apache Cassandra** (locally or via Docker)
 
----
+2. **Create Keyspace:**
+   ```sql
+   CREATE KEYSPACE IF NOT EXISTS iot_data
+   WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1};
+   ```
 
-## Setup: Database
-1) Start Cassandra locally (or point to a remote cluster).
+3. **Create Tables:**
+   ```bash
+   cqlsh -f Database/Create_Crypto_table.cql
+   cqlsh -f Database/Email_subscribers.cql
+   cqlsh -f Database/Email_Verify_table.cql
+   ```
 
-2) Create keyspace (if not already present):
+### Backend
 
-```sql
-CREATE KEYSPACE IF NOT EXISTS iot_data
-WITH REPLICATION = {
-  'class': 'SimpleStrategy',
-  'replication_factor': 1
-};
-```
+1. **Install Go 1.22+**
 
-3) Create the table:
+2. **Install dependencies:**
+   ```bash
+   cd Backend/crypto/backend
+   go mod tidy
+   ```
 
-```bash
-cqlsh -f Database/Create_Crypto_table.cql
-```
+3. **Set OpenAI API Key:**
+   ```bash
+   export OPENAI_API_KEY="sk-..."
+   # or on Windows:
+   # $env:OPENAI_API_KEY = "sk-..."
+   ```
 
----
+4. **Run the API server:**
+   ```bash
+   go run main.go analytics.go AI.go Report.go
+   ```
+   - Listens on port 8000
+   - Expects Cassandra at 127.0.0.1 and keyspace iot_data
 
-## Running: Backend
+5. **Run the ingestion worker:**
+   ```bash
+   go run crypto.go
+   ```
 
-The backend consists of two programs: the HTTP API server and the ingestion worker.
+6. **Alternative: Docker setup:**
+   ```bash
+   docker build -t crypto-ingestor .
+   docker run --rm --name crypto-ingestor --network host crypto-ingestor
+   ```
 
-### 1) HTTP API server (port 8000)
+### Frontend
 
-PowerShell (Windows):
+1. **Install Node.js 18+ and npm**
 
-```powershell
-cd Backend/crypto/backend
-go run .\main.go .\analytics.go .\AI.go
-```
+2. **Install dependencies:**
+   ```bash
+   cd Frontend/crypto
+   npm install
+   ```
 
-This server expects Cassandra at `127.0.0.1` and the keyspace `iot_data`.
+3. **Start development server:**
+   ```bash
+   npm run dev
+   ```
+   - Opens at http://localhost:5173
+   - Calls backend at http://localhost:8000
 
-If you encounter a "redeclared: session" error, ensure there is only a single `var session *gocql.Session` declaration (keep it in `main.go`).
+4. **Build for production:**
+   ```bash
+   npm run build
+   ```
 
-### 2) Ingestion worker (fetch prices every minute)
+## API Reference
 
-PowerShell (Windows):
+**Base URL:** `http://localhost:8000`
 
-```powershell
-cd Backend/crypto/backend
-go run .\crypto.go
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/latest/{coin_id}` | GET | Latest price for a coin |
+| `/history/{coin_id}?minutes={n}` | GET | Price history for last N minutes |
+| `/average/{coin_id}?start={t}&end={t}` | GET | Average price in range |
+| `/at/{coin_id}?timestamp={t}` | GET | Price at/before timestamp |
+| `/range/{coin_id}?start={t}&end={t}` | GET | Min/Max price in range |
+| `/coins` | GET | List of available coins |
+| `/volatility/{coin_id}?start={t}&end={t}` | GET | Standard deviation and mean price in range |
+| `/trend/{coin_id}?start={t}&end={t}` | GET | Trend analysis (regression) |
+| `/top-movers?minutes={n}` | GET | Top movers in last N minutes |
+| `/ask` | POST | Natural language question → CQL + results (text/plain body) |
+| `/subscribe` | POST | Subscribe to daily report (email) |
+| `/unsubscribe` | POST | Unsubscribe from daily report (email) |
+| `/report` | GET | Download daily PDF report |
 
-This worker, as written, connects to Cassandra at `host.docker.internal`. If you are not running it in Docker, change that host to `127.0.0.1` (or your Cassandra IP) in `crypto.go`.
+## Daily Report Generation
 
-### Optional: Run the worker in Docker
+### Automated PDF
+`generateDailyReportPDF` creates a multi-page PDF with:
+- Cover page
+- Daily range metrics
+- Top gainers/losers
+- Charts and AI-generated summaries
 
-```powershell
-cd Backend/crypto/backend
-docker build -t crypto-ingestor .
-docker run --rm --name crypto-ingestor ^
-  --network host ^
-  crypto-ingestor
-```
+### Charts
+Generated using `gonum/plot` and included in the PDF
 
-Notes:
-- The provided `Dockerfile` builds and runs the ingestion worker (`crypto.go`). It does not expose an HTTP port.
-- Ensure the container can reach Cassandra. On Windows with Docker Desktop, `host.docker.internal` resolves to the host.
+### AI Summaries
+Uses OpenAI GPT for concise, professional analysis of tables and charts
 
----
+### Email Delivery
+Users can subscribe to receive the report via email
 
-## Running: Frontend
+## Email Subscription
 
-PowerShell (Windows):
+- **Subscribe:** POST to `/subscribe` with email to receive daily reports
+- **Unsubscribe:** POST to `/unsubscribe` with email to stop receiving reports
+- **Email logic:** See `Report.go` and `Email_subscribers.cql`
 
-```powershell
-cd Frontend/crypto
-npm install
-npm run dev
-```
+## Cloud Deployment
 
-The app starts on `http://localhost:5173` and calls the backend at `http://localhost:8000` (see `src/services/api.ts`).
+The application is fully deployed in the cloud for production use:
 
-Build for production:
+- **Frontend:** Deployed to [Vercel](https://vercel.com) with automatic deployments from the main branch
+- **Backend API:** Deployed to [Render](https://render.com) with auto-scaling and health monitoring
+- **Database:** Hosted on [DataStax AstraDB](https://astra.datastax.com) (managed Cassandra service)
+- **Cron Jobs:** Data ingestion worker running on AWS EC2 instance with scheduled data fetching
 
-```powershell
-npm run build
-npm run preview
-```
+### Cloud Configuration
 
----
+**Frontend (Vercel):**
+- Automatic builds from GitHub repository
+- Environment variables configured in Vercel dashboard
+- Custom domain support with SSL
 
-## Environment variables
+**Backend (Render):**
+- Connected to GitHub for auto-deployments
+- Environment variables set in Render dashboard
+- Health check endpoint configured
 
-Required only if you use the AI endpoint (`/ask`):
+**Database (AstraDB):**
+- Secure cloud-native Cassandra database
+- Connection via secure connect bundle
+- Automatic backups and scaling
 
-```powershell
-$env:OPENAI_API_KEY = "sk-..."
-```
+**Cron Worker (AWS EC2):**
+- Scheduled data ingestion from CoinGecko API
+- Systemd service for automatic startup
+- CloudWatch monitoring and logging
 
-Then restart the HTTP server so `AI.go` can read it.
+## Development
 
----
+### Frontend
 
-## API Reference (HTTP)
-Base URL: `http://localhost:8000`
+**Key files:**
+- Components: `src/components/`
+- API: `src/services/api.ts`
+- Types: `src/types/index.ts`
+- Styles: `src/App.css`
 
-- `GET /latest/{coin_id}` → Latest `PriceData`
-- `GET /history/{coin_id}?minutes={n}` → Array of `PriceData`
-- `GET /average/{coin_id}?start={RFC3339}&end={RFC3339}` → Average over range
-- `GET /at/{coin_id}?timestamp={RFC3339}` → Price nearest at/before timestamp
-- `GET /range/{coin_id}?start={RFC3339}&end={RFC3339}` → Min/Max over range
-- `GET /coins` → Array of available `coin_id`
-- `GET /volatility/{coin_id}?start={RFC3339}&end={RFC3339}` → Stddev and mean
-- `GET /trend/{coin_id}?start={RFC3339}&end={RFC3339}` → Linear regression slope, label
-- `GET /top-movers?minutes={n}` → Largest absolute % movers since T‑n minutes
-- `POST /ask` (text/plain) → Array of rows answering NL question via generated CQL
+**Scripts:**
+- `npm run dev` – Start dev server
+- `npm run build` – Build for production
+- `npm run preview` – Preview built app
+- `npm run lint` – Run ESLint
 
-Types (as returned to the frontend):
+### Backend
 
-```ts
-// Price
-interface PriceData {
-  coin_id: string
-  timestamp: string // ISO
-  price_usd: number
-}
+**Key files:**
+- API server: `main.go`
+- Ingestion: `crypto.go`
+- Analytics: `analytics.go`
+- AI/NL: `AI.go`
+- PDF/Email: `Report.go`
+- Docker: See `Dockerfile` and `Docker_setup.sh`
 
-// Average
-interface AveragePriceData {
-  coin_id: string
-  average: number
-  data_points: number
-  start: string
-  end: string
-}
+## Demo
 
-// Range
-interface PriceRangeData {
-  coin_id: string
-  min: number
-  max: number
-  start: string
-  end: string
-}
+- **Video:** [Demo Video](Documents/Dashboard_demo.mp4)
+- **Sample Report:** See [report_example.pdf](Documents/report_example.pdf)
 
-// Volatility
-interface VolatilityData {
-  coin_id: string
-  start: string
-  end: string
-  stddev_price: number
-  mean_price: number
-  data_points: number
-}
+## License
 
-// Trend
-interface TrendData {
-  coin_id: string
-  slope: number
-  trend: string // Uptrend | Downtrend | Sideways
-  data_points: number
-  start: string
-  end: string
-}
+This project is for educational and non-commercial use. See individual file headers and dependencies for license details.
 
-// Top Movers
-interface TopMoverData {
-  coin_id: string
-  start_price: number
-  end_price: number
-  percent_change: number
-}
-```
-
-Example requests:
-
-```bash
-curl http://localhost:8000/latest/bitcoin
-curl "http://localhost:8000/history/bitcoin?minutes=120"
-curl "http://localhost:8000/average/bitcoin?start=2024-01-01T00:00:00Z&end=2024-01-02T00:00:00Z"
-curl -X POST -H "Content-Type: text/plain" --data "show last 10 bitcoin prices" http://localhost:8000/ask
-```
-
----
-
-## Frontend development
-
-Key files:
-- `src/services/api.ts`: All API calls and base URL
-- `src/components/*`: UI components (`Header`, `PriceCard`, `ChartCard`, `StatsCard`, `AdvancedAnalytics`, `CoinManager`)
-- `src/App.tsx`: Main dashboard orchestration
-
-Scripts (`Frontend/crypto/package.json`):
-- `npm run dev` – start dev server
-- `npm run build` – type‑check and build
-- `npm run preview` – preview built app
-- `npm run lint` – run ESLint
-
----
-
-## Troubleshooting
-- If the frontend loads but data is empty, verify the ingestion worker is running and Cassandra has rows in `iot_data.crypto_price_by_coin`.
-- CORS errors: the backend only allows `http://localhost:5173`. Adjust in `main.go` if you use a different origin.
-- Time parameters must be RFC3339, e.g. `2024-01-01T00:00:00Z`.
-- The `/ask` endpoint requires `$env:OPENAI_API_KEY` and outbound HTTPS connectivity.
-- If running the worker in Docker, ensure it can reach Cassandra (`host.docker.internal` on Windows/Mac). On Linux, use the host IP or a user‑defined bridge network.
-
----
-
+For questions or contributions, please open an issue or pull request.
