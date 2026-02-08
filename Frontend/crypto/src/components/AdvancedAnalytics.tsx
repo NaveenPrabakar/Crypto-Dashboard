@@ -155,9 +155,10 @@ export const AdvancedAnalytics = ({ selectedCoin }: AdvancedAnalyticsProps) => {
       const assistantMessage: ChatMessage = { role: 'assistant', results: data }
       setMessages((prev) => [...prev, assistantMessage])
       setAiQuestion('')
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err)
-      const errorMessage: ChatMessage = { role: 'assistant', text: 'Sorry, I could not process that request.' }
+      const text = err instanceof Error ? err.message : 'Sorry, I could not process that request.'
+      const errorMessage: ChatMessage = { role: 'assistant', text }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
       setAiLoading(false)

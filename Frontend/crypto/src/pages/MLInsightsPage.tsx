@@ -83,8 +83,8 @@ export const MLInsightsPage = () => {
       const data = await ApiService.askAI(q)
       setAiResults(data)
       setAiQuestion('')
-    } catch (err) {
-      setAiError('AI query failed')
+    } catch (err: unknown) {
+      setAiError(err instanceof Error ? err.message : 'AI query failed')
       console.error(err)
     } finally {
       setAiLoading(false)

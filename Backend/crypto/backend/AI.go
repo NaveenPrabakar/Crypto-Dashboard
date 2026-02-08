@@ -2,13 +2,14 @@ package main
 
 import (
     "bytes"
+    "encoding/json"
     "fmt"
+    "io"
     "io/ioutil"
+    "log"
     "net/http"
     "os"
-	"encoding/json" 
-	"strings"  
-    "io"
+    "strings"
     "time"
 )
 
@@ -16,7 +17,7 @@ type OpenAIResponse struct {
     Choices []struct {
         Message struct {
             Content string `json:"content"`
-        } `json:"message"`
+        } `json:"message"` // OpenAI returns lowercase "message"
     } `json:"choices"`
 }
 
@@ -50,6 +51,19 @@ func callOpenAI(prompt string) (string, error) {
         return "", err
     }
 
+    if resp.StatusCode != http.StatusOK {
+        var errResp struct {
+            Error struct {
+                Message string `json:"message"`
+            } `json:"error"`
+        }
+        _ = json.Unmarshal(body, &errResp)
+        msg := errResp.Error.Message
+        if msg == "" {
+            msg = string(body)
+        }
+        return "", fmt.Errorf("OpenAI API error %d: %s", resp.StatusCode, msg)
+    }
 
     var openaiResp OpenAIResponse
     err = json.Unmarshal(body, &openaiResp)
@@ -63,6 +77,22 @@ func callOpenAI(prompt string) (string, error) {
 
     cqlQuery := openaiResp.Choices[0].Message.Content
     return cqlQuery, nil
+}
+
+// stripCQLFromMarkdown removes markdown code fences so we get raw CQL (e.g. ```cql ... ``` or ``` ... ```).
+func stripCQLFromMarkdown(s string) string {
+    s = strings.TrimSpace(s)
+    for _, prefix := range []string{"```cql", "```sql", "```CQL", "```SQL", "```"} {
+        if strings.HasPrefix(s, prefix) {
+            s = strings.TrimPrefix(s, prefix)
+            break
+        }
+    }
+    s = strings.TrimSpace(s)
+    if strings.HasSuffix(s, "```") {
+        s = strings.TrimSuffix(s, "```")
+    }
+    return strings.TrimSpace(s)
 }
 
 
@@ -85,19 +115,30 @@ func handleAsk(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-aiPrompt := `
+    now := time.Now().UTC()
+    since15 := now.Add(-15 * time.Minute)
+    timeContext := fmt.Sprintf(
+        "Current UTC time for reference: %s. '15 minutes ago' in UTC: %s. Use these exact timestamp formats in CQL (e.g. for 'last 15 minutes' use timestamp >= '%s').",
+        now.Format("2006-01-02 15:04:05"),
+        since15.Format("2006-01-02 15:04:05"),
+        since15.Format("2006-01-02 15:04:05"),
+    )
+
+    aiPrompt := `
 You are an assistant that converts natural language questions about the table
 "iot_data.crypto_price_by_coin" into valid CQL queries.
 The table has columns: coin_id (text), timestamp (timestamp), price_usd (double).
-The PRIMARY KEY is (coin_id, timestamp) with timestamp in DESC order.
+The PRIMARY KEY is (coin_id, timestamp) with CLUSTERING ORDER BY (timestamp DESC).
 
-Return ONLY the raw CQL query as plain text (no markdown, no explanations).
-The query must be safe, include ALLOW FILTERING where needed, and return actual data from the table.
-The query must always select all three columns: coin_id, timestamp, price_usd.
+Rules:
+- Return ONLY the raw CQL query as plain text. No markdown, no code blocks, no explanations.
+- SELECT must use exactly this column order: coin_id, timestamp, price_usd.
+- For time ranges (e.g. "last 15 minutes", "last hour") use WHERE coin_id = '...' AND timestamp >= 'YYYY-MM-DD HH:MM:SS' with the timestamp literal.
+- Keyspace is iot_data. Table is crypto_price_by_coin. Always use: FROM iot_data.crypto_price_by_coin
+- Add ALLOW FILTERING when using timestamp range or LIMIT. Syntax: ... LIMIT N ALLOW FILTERING; or ... ALLOW FILTERING;
+- Coin IDs in the table are lowercase: bitcoin, ethereum, cardano, solana, polkadot, chainlink, etc.
 
-IMPORTANT: If the query includes a LIMIT clause, ALLOW FILTERING must come immediately after the LIMIT clause.
-The correct syntax is: 
-  SELECT ... FROM ... WHERE ... LIMIT ... ALLOW FILTERING;
+` + timeContext + `
 
 User question: ` + question
 
@@ -105,21 +146,28 @@ User question: ` + question
 
     cqlQuery, err := callOpenAI(aiPrompt)
     if err != nil {
-        http.Error(w, "AI query generation failed", http.StatusInternalServerError)
+        log.Printf("AI ask: OpenAI failed: %v", err)
+        writeAskError(w, http.StatusInternalServerError, "AI query generation failed: "+err.Error())
         return
     }
 
+    cqlQuery = stripCQLFromMarkdown(cqlQuery)
     cqlQuery = strings.TrimSpace(cqlQuery)
+    if cqlQuery == "" {
+        writeAskError(w, http.StatusBadRequest, "No query generated")
+        return
+    }
+    if !strings.HasSuffix(cqlQuery, ";") {
+        cqlQuery += ";"
+    }
     if !strings.Contains(strings.ToUpper(cqlQuery), "ALLOW FILTERING") {
         cqlQuery = strings.TrimSuffix(cqlQuery, ";")
         cqlQuery += " ALLOW FILTERING;"
     }
 
-    
-
     iter := session.Query(cqlQuery).Iter()
     if iter == nil {
-        http.Error(w, "Failed to execute query", http.StatusInternalServerError)
+        writeAskError(w, http.StatusInternalServerError, "Failed to execute query")
         return
     }
 
@@ -144,17 +192,20 @@ User question: ` + question
     }
 
     if err := iter.Close(); err != nil {
-        
-        http.Error(w, "Cassandra query execution failed", http.StatusInternalServerError)
+        log.Printf("AI ask: Cassandra query failed: %v", err)
+        writeAskError(w, http.StatusBadRequest, "Query execution failed: "+err.Error())
         return
     }
 
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusOK)
-
     if err := json.NewEncoder(w).Encode(results); err != nil {
-       
-        http.Error(w, "Failed to write response", http.StatusInternalServerError)
-        return
+        log.Printf("AI ask: encode error: %v", err)
     }
+}
+
+func writeAskError(w http.ResponseWriter, code int, message string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(code)
+    json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

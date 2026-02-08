@@ -93,10 +93,12 @@ export class ApiService {
       },
       body: question,
     })
+    const body = await response.json().catch(() => ({}))
     if (!response.ok) {
-      throw new Error('Failed to fetch AI query results')
+      const msg = typeof body?.error === 'string' ? body.error : 'AI query failed'
+      throw new Error(msg)
     }
-    return response.json()
+    return Array.isArray(body) ? body : []
   }
 
   static async subscribeToReports(email: string): Promise<{ message: string; email: string }> {
