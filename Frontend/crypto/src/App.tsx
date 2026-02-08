@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
-import { 
-  Header, 
-  CoinSelector, 
-  PriceCard, 
-  ChartCard, 
-  StatsCard, 
-  AdvancedAnalytics, 
+import {
+  Header,
+  CoinSelector,
+  PriceCard,
+  ChartCard,
+  StatsCard,
   CoinManager,
   EmailSignup,
 } from './components'
+import { AnalyticsPage, MLInsightsPage, TopMoversPage } from './pages'
 import { Routes, Route } from 'react-router-dom'
 import { ApiService } from './services/api'
 import type { PriceData, CoinInfo } from './types'
@@ -20,7 +20,7 @@ const COINS: CoinInfo[] = [
   { id: 'cardano', name: 'Cardano', symbol: 'ADA', color: '#0033ad' },
   { id: 'solana', name: 'Solana', symbol: 'SOL', color: '#14f195' },
   { id: 'polkadot', name: 'Polkadot', symbol: 'DOT', color: '#e6007a' },
-  { id: 'chainlink', name: 'Chainlink', symbol: 'LINK', color: '#2a5ada' }
+  { id: 'chainlink', name: 'Chainlink', symbol: 'LINK', color: '#2a5ada' },
 ]
 
 function App() {
@@ -30,7 +30,6 @@ function App() {
   const [timeRange, setTimeRange] = useState<number>(60)
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
-  const [showAdvancedAnalytics, setShowAdvancedAnalytics] = useState<boolean>(false)
   const [showCoinManager, setShowCoinManager] = useState<boolean>(false)
 
   const fetchLatestPrice = async (coinId: string) => {
@@ -59,7 +58,7 @@ function App() {
 
   const handleCoinSelect = (coinId: string) => {
     setSelectedCoin(coinId)
-    setShowCoinManager(false) // Close coin manager when a coin is selected
+    setShowCoinManager(false)
   }
 
   const handleTimeRangeChange = (minutes: number) => {
@@ -71,14 +70,11 @@ function App() {
     fetchPriceHistory(selectedCoin, timeRange)
   }, [selectedCoin, timeRange])
 
-  const selectedCoinInfo = COINS.find(coin => coin.id === selectedCoin)
+  const selectedCoinInfo = COINS.find((coin) => coin.id === selectedCoin)
 
   return (
     <div className="app">
-      <Header 
-        timeRange={timeRange} 
-        onTimeRangeChange={handleTimeRangeChange} 
-      />
+      <Header timeRange={timeRange} onTimeRangeChange={handleTimeRangeChange} />
 
       <main className="main">
         <Routes>
@@ -87,33 +83,22 @@ function App() {
             element={
               <>
                 <div className="main-controls">
-                  <CoinSelector 
+                  <CoinSelector
                     coins={COINS}
                     selectedCoin={selectedCoin}
                     onCoinSelect={handleCoinSelect}
                   />
-                  
                   <div className="control-buttons">
-                    <button 
-                      onClick={() => setShowAdvancedAnalytics(!showAdvancedAnalytics)}
-                      className={`control-button ${showAdvancedAnalytics ? 'active' : ''}`}
-                    >
-                      {showAdvancedAnalytics ? 'Hide' : 'Show'} Advanced Analytics
-                    </button>
-                    <button 
+                    <button
                       onClick={() => setShowCoinManager(!showCoinManager)}
                       className={`control-button ${showCoinManager ? 'active' : ''}`}
                     >
-                      {showCoinManager ? 'Hide' : 'Show'} Available Coins
+                      {showCoinManager ? 'Hide' : 'Show'} Coins
                     </button>
                   </div>
                 </div>
 
-                {error && (
-                  <div className="error-message">
-                    {error}
-                  </div>
-                )}
+                {error && <div className="error-message">{error}</div>}
 
                 {showCoinManager && (
                   <div className="coin-manager-section">
@@ -122,30 +107,25 @@ function App() {
                 )}
 
                 <div className="dashboard-grid">
-                  <PriceCard 
+                  <PriceCard
                     coinName={selectedCoinInfo?.name || selectedCoin}
                     latestPrice={latestPrice}
                     priceHistory={priceHistory}
                   />
-
-                  <ChartCard 
+                  <ChartCard
                     priceHistory={priceHistory}
                     timeRange={timeRange}
                     loading={loading}
-                    coinColor={selectedCoinInfo?.color || '#6b7280'}
+                    coinColor={selectedCoinInfo?.color || '#d4af37'}
                   />
-
                   <StatsCard priceHistory={priceHistory} />
                 </div>
-
-                {showAdvancedAnalytics && (
-                  <div className="advanced-analytics-section">
-                    <AdvancedAnalytics selectedCoin={selectedCoin} />
-                  </div>
-                )}
               </>
             }
           />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/ml" element={<MLInsightsPage />} />
+          <Route path="/top-movers" element={<TopMoversPage />} />
           <Route path="/subscribe" element={<EmailSignup />} />
         </Routes>
       </main>

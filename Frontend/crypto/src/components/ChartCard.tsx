@@ -46,15 +46,15 @@ export const ChartCard = ({ priceHistory, timeRange, loading, coinColor }: Chart
                   <stop offset="95%" stopColor={coinColor} stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(212, 175, 55, 0.2)" />
               <XAxis 
                 dataKey="time" 
-                stroke="#9ca3af"
+                stroke="rgba(212, 175, 55, 0.5)"
                 fontSize={12}
                 tickLine={false}
               />
               <YAxis 
-                stroke="#9ca3af"
+                stroke="rgba(212, 175, 55, 0.5)"
                 fontSize={12}
                 tickLine={false}
                 tickFormatter={(value) => `$${value.toFixed(2)}`}
@@ -62,10 +62,10 @@ export const ChartCard = ({ priceHistory, timeRange, loading, coinColor }: Chart
               />
               <Tooltip 
                 contentStyle={{
-                  backgroundColor: '#1f2937',
-                  border: '1px solid #374151',
+                  backgroundColor: 'rgba(10, 10, 14, 0.95)',
+                  border: '1px solid rgba(212, 175, 55, 0.4)',
                   borderRadius: '8px',
-                  color: '#f9fafb'
+                  color: '#f5f5f0'
                 }}
                 formatter={(value: any) => [formatPrice(value), 'Price']}
                 labelFormatter={(label) => `Time: ${label}`}

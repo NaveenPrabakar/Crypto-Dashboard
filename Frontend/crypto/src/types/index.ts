@@ -55,4 +55,17 @@ export interface TopMoverData {
   start_price: number
   end_price: number
   percent_change: number
+}
+
+export interface PredictData {
+  coin_id: string
+  horizon_minutes: number
+  predicted_price: number
+  price_low: number
+  price_high: number
+  trend: string
+  slope: number
+  data_points: number
+  predicted_at: string
+  horizon_end_time: string
 } 

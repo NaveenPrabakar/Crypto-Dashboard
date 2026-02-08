@@ -1,4 +1,4 @@
-import type { PriceData, AveragePriceData, PriceRangeData, VolatilityData, TrendData, TopMoverData } from '../types'
+import type { PriceData, AveragePriceData, PriceRangeData, VolatilityData, TrendData, TopMoverData, PredictData } from '../types'
 
 const API_BASE_URL = 'https://crypto-dashboard-dkzi.onrender.com'
 
@@ -71,6 +71,16 @@ export class ApiService {
     const response = await fetch(`${API_BASE_URL}/top-movers?minutes=${minutes}`)
     if (!response.ok) {
       throw new Error('Failed to fetch top movers data')
+    }
+    return response.json()
+  }
+
+  static async getPredict(coinId: string, horizonMinutes: number = 60, lookbackMinutes?: number): Promise<PredictData> {
+    let url = `${API_BASE_URL}/predict/${coinId}?horizon_minutes=${horizonMinutes}`
+    if (lookbackMinutes != null) url += `&lookback_minutes=${lookbackMinutes}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch ML prediction')
     }
     return response.json()
   }

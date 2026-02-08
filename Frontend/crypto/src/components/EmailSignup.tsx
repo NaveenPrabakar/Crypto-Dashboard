@@ -67,7 +67,7 @@ export const EmailSignup = () => {
           <h2>Subscribe to Daily Email Reports</h2>
           <span className="time-range">Free</span>
         </div>
-        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+        <p className="page-subtitle" style={{ marginBottom: '1rem' }}>
           Get a daily summary of crypto prices and trends delivered to your inbox.
         </p>
         <form onSubmit={handleSubscribe} className="timestamp-form">
@@ -83,15 +83,15 @@ export const EmailSignup = () => {
             {loadingSubscribe ? 'Processing…' : 'Subscribe'}
           </button>
         </form>
-        {subMessage && <div style={{ color: '#10b981', marginTop: '0.5rem' }}>{subMessage}</div>}
-        {subError && <div style={{ color: '#ef4444', marginTop: '0.5rem' }}>{subError}</div>}
+        {subMessage && <div className="change-value positive" style={{ marginTop: '0.5rem' }}>{subMessage}</div>}
+        {subError && <div className="change-value negative" style={{ marginTop: '0.5rem' }}>{subError}</div>}
       </div>
 
       <div className="card">
         <div className="card-header">
           <h2>Unsubscribe</h2>
         </div>
-        <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+        <p className="page-subtitle" style={{ marginBottom: '1rem' }}>
           Don’t want to receive daily reports anymore? Enter your email to unsubscribe.
         </p>
         <form onSubmit={handleUnsubscribe} className="timestamp-form">
@@ -106,35 +106,18 @@ export const EmailSignup = () => {
           <button
             type="submit"
             disabled={loadingUnsubscribe}
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#ff4136',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-            }}
+            className="submit-button"
+            style={{ borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(255, 82, 82, 0.1)' }}
           >
             {loadingUnsubscribe ? 'Processing…' : 'Unsubscribe'}
           </button>
         </form>
-        {unsubMessage && <div style={{ color: '#10b981', marginTop: '0.5rem' }}>{unsubMessage}</div>}
-        {unsubError && <div style={{ color: '#ef4444', marginTop: '0.5rem' }}>{unsubError}</div>}
+        {unsubMessage && <div className="change-value positive" style={{ marginTop: '0.5rem' }}>{unsubMessage}</div>}
+        {unsubError && <div className="change-value negative" style={{ marginTop: '0.5rem' }}>{unsubError}</div>}
       </div>
 
       <div style={{ marginTop: '-0.5rem', textAlign: 'center' }}>
-        <button
-          type="button"
-          onClick={handleBack}
-          style={{
-            padding: '0.5rem 1rem',
-            background: '#001f3f',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: 'pointer',
-          }}
-        >
+        <button type="button" onClick={handleBack} className="control-button">
           ← Back
         </button>
       </div>
